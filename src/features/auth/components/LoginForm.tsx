@@ -8,13 +8,22 @@ import { AppButton } from "@/components/ui/AppButton";
 import { AppInput } from "@/components/ui/AppInput";
 import { useLogin } from "@/features/auth/hooks/use-login";
 import {
-    loginSchema,
-    type LoginFormData,
+  loginSchema,
+  type LoginFormData,
 } from "@/features/auth/schemas/login.schema";
+import { AxiosError } from "axios";
+import { ApiErrorResponse } from "../types/auth.types";
 
 export function LoginForm() {
   const loginMutation = useLogin();
   const [showPassword, setShowPassword] = useState(false);
+
+  const loginError = loginMutation.error as AxiosError<ApiErrorResponse>;
+
+  const errorMessage =
+    loginError?.response?.data?.mensaje ?? "No fue posible iniciar sesión.";
+
+  const errorCode = loginError?.response?.data?.codigo;
 
   const {
     control,
@@ -91,7 +100,7 @@ export function LoginForm() {
 
       <Pressable
         onPress={() => {
-          // Aquí conectaremos recuperación de contraseña.
+          // Recuperación de contraseña.
         }}
         style={({ pressed }) => [
           styles.forgotButton,
@@ -101,13 +110,13 @@ export function LoginForm() {
         <Text style={styles.forgotText}>¿Olvidaste tu contraseña?</Text>
       </Pressable>
 
-      {loginMutation.isError && (
-        <View style={styles.apiError}>
-          <Text style={styles.apiErrorText}>
-            Correo o contraseña incorrectos.
-          </Text>
-        </View>
-      )}
+      <View style={styles.errorContainer}>
+        {loginMutation.isError && (
+          <View style={styles.apiError}>
+            <Text style={styles.apiErrorText}>{errorMessage}</Text>
+          </View>
+        )}
+      </View>
 
       <AppButton
         title="Iniciar sesión"
@@ -146,6 +155,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     color: "#111111",
+  },
+
+  errorContainer: {
+    minHeight: 48,
+    justifyContent: "center",
   },
 
   apiError: {

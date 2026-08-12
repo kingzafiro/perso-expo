@@ -1,10 +1,12 @@
 import { LoginForm } from "@/features/auth/components/LoginForm";
+import { Link } from "expo-router";
 import {
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    View,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -29,11 +31,14 @@ export default function LoginScreen() {
           </View>
 
           <LoginForm />
-
           <View style={styles.footer}>
             <Text style={styles.footerText}>¿Aún no tienes cuenta?</Text>
 
-            <Text style={styles.registerText}>Crear cuenta</Text>
+            <Link href="/(auth)/registro" asChild>
+              <Pressable>
+                <Text style={styles.registerText}>Crear cuenta</Text>
+              </Pressable>
+            </Link>
           </View>
         </View>
       </KeyboardAvoidingView>

@@ -1,13 +1,34 @@
 export interface AuthUser {
-  id: number;
-  name: string;
+  id_usuario: number;
+  nombre: string;
   email: string;
 }
 
 export interface AuthResponse {
   ok: boolean;
-  msg: string;
-  nombre: string;
-  rol: string;
-  token: string;
+  usuario: AuthUser;
+  accessToken: string;
+  refreshToken: string;
+}
+
+export interface ApiErrorResponse {
+  ok: boolean;
+  codigo?: string;
+  mensaje: string;
+}
+
+export interface RegisterResponse {
+  ok: boolean;
+  id_usuario?: number;
+  email: string;
+  requiereVerificacion: boolean;
+  codigo?: string;
+  mensaje: string;
+}
+
+export interface VerifyEmailResponse {
+  ok: boolean;
+  mensaje: string;
+  accessToken: string;
+  refreshToken: string;
 }

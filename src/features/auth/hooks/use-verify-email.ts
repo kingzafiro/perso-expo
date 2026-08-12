@@ -1,14 +1,14 @@
 import { useMutation } from "@tanstack/react-query";
 
-import { login } from "@/features/auth/api/login";
+import { verifyEmail } from "@/features/auth/api/verify-email";
 import { secureStorage } from "@/lib/storage/secure-storage";
 import { useAuthStore } from "@/stores/auth.store";
 
-export function useLogin() {
+export function useVerifyEmail() {
   const setAuthenticated = useAuthStore((state) => state.setAuthenticated);
 
   return useMutation({
-    mutationFn: login,
+    mutationFn: verifyEmail,
 
     onSuccess: async (data) => {
       await Promise.all([
