@@ -12,6 +12,7 @@ import {
   type LoginFormData,
 } from "@/features/auth/schemas/login.schema";
 import { AxiosError } from "axios";
+import { router } from "expo-router";
 import { ApiErrorResponse } from "../types/auth.types";
 
 export function LoginForm() {
@@ -100,7 +101,7 @@ export function LoginForm() {
 
       <Pressable
         onPress={() => {
-          // Recuperación de contraseña.
+          router.push("/(auth)/forgot-password");
         }}
         style={({ pressed }) => [
           styles.forgotButton,

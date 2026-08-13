@@ -31,6 +31,7 @@ export default function LoginScreen() {
           </View>
 
           <LoginForm />
+
           <View style={styles.footer}>
             <Text style={styles.footerText}>¿Aún no tienes cuenta?</Text>
 

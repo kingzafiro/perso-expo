@@ -8,7 +8,5 @@ export async function login(data: LoginFormData): Promise<AuthResponse> {
     pass: data.password,
   });
 
-  console.log("Login response:", response.data); // Log the entire response data for debugging
-
   return response.data;
 }
