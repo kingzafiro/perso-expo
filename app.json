@@ -8,7 +8,8 @@
     "scheme": "perso",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {
@@ -28,13 +29,33 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#F06808",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
       ],
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      "expo-apple-authentication",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Perso necesita acceso a tus fotos para actualizar tu foto de perfil.",
+          "cameraPermission": "Perso necesita acceso a tu cámara para tomar una nueva foto de perfil."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Perso usa tu ubicación para autocompletar tu dirección en el mapa y mostrarte vacantes cercanas."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Perso usa la cámara para escanear tus documentos oficiales con el encuadre adecuado."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

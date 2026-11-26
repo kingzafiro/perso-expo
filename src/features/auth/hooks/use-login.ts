@@ -1,22 +1,18 @@
 import { useMutation } from "@tanstack/react-query";
 
 import { login } from "@/features/auth/api/login";
-import { secureStorage } from "@/lib/storage/secure-storage";
-import { useAuthStore } from "@/stores/auth.store";
+import { saveSessionTokens } from "@/lib/auth/session";
 
 export function useLogin() {
-  const setAuthenticated = useAuthStore((state) => state.setAuthenticated);
-
   return useMutation({
     mutationFn: login,
 
     onSuccess: async (data) => {
-      await Promise.all([
-        secureStorage.setAccessToken(data.accessToken),
-        secureStorage.setRefreshToken(data.refreshToken),
-      ]);
-
-      setAuthenticated(true);
+      await saveSessionTokens(
+        data.accessToken,
+        data.refreshToken,
+        data.usuario,
+      );
     },
   });
 }

@@ -8,6 +8,7 @@ import { z } from "zod";
 import { AppButton } from "@/components/ui/AppButton";
 import { AppInput } from "@/components/ui/AppInput";
 import { useVerifyRecovery } from "@/features/auth/hooks/use-verify-recovery";
+import { useTheme } from "@/hooks/use-theme";
 
 const verifyRecoverySchema = z.object({
   codigo: z
@@ -29,6 +30,7 @@ interface VerifyRecoveryFormProps {
 }
 
 export function VerifyRecoveryForm({ email }: VerifyRecoveryFormProps) {
+  const theme = useTheme();
   const verifyRecoveryMutation = useVerifyRecovery();
 
   const {
@@ -72,25 +74,21 @@ export function VerifyRecoveryForm({ email }: VerifyRecoveryFormProps) {
     submitCode(data.codigo);
   };
 
-  const apiError = verifyRecoveryMutation.error as AxiosError<ApiErrorResponse>;
+  const apiError =
+    verifyRecoveryMutation.error as AxiosError<ApiErrorResponse> | null;
 
   const errorMessage =
     apiError?.response?.data?.mensaje ?? "No fue posible validar el código.";
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Verifica tu código</Text>
-
-        <Text style={styles.description}>
-          Ingresa el código de 6 dígitos que enviamos a tu correo.
+      <View
+        style={[styles.emailBadge, { backgroundColor: theme.inputBackground }]}
+      >
+        <Text style={[styles.emailLabel, { color: theme.textSecondary }]}>
+          Código enviado a
         </Text>
-      </View>
-
-      <View style={styles.emailContainer}>
-        <Text style={styles.emailLabel}>Código enviado a</Text>
-
-        <Text style={styles.email}>{email}</Text>
+        <Text style={[styles.email, { color: theme.text }]}>{email}</Text>
       </View>
 
       <Controller
@@ -102,10 +100,10 @@ export function VerifyRecoveryForm({ email }: VerifyRecoveryFormProps) {
             placeholder="000000"
             keyboardType="number-pad"
             autoCorrect={false}
+            textContentType="oneTimeCode"
             value={value}
             onChangeText={(text) => {
               const codigo = text.replace(/\D/g, "").slice(0, 6);
-
               onChange(codigo);
 
               if (codigo.length === 6) {
@@ -119,13 +117,13 @@ export function VerifyRecoveryForm({ email }: VerifyRecoveryFormProps) {
         )}
       />
 
-      <View style={styles.feedbackContainer}>
-        {verifyRecoveryMutation.isError && (
-          <View style={styles.apiError}>
-            <Text style={styles.apiErrorText}>{errorMessage}</Text>
-          </View>
-        )}
-      </View>
+      {verifyRecoveryMutation.isError && (
+        <View style={[styles.apiError, { backgroundColor: theme.errorSoft }]}>
+          <Text style={[styles.apiErrorText, { color: theme.error }]}>
+            {errorMessage}
+          </Text>
+        </View>
+      )}
 
       <AppButton
         title="Continuar"
@@ -139,53 +137,31 @@ export function VerifyRecoveryForm({ email }: VerifyRecoveryFormProps) {
 const styles = StyleSheet.create({
   container: {
     width: "100%",
-    gap: 20,
+    gap: 18,
   },
 
-  header: {
-    gap: 8,
-  },
-
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#111111",
-  },
-
-  description: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: "#737373",
-  },
-
-  emailContainer: {
-    gap: 4,
+  emailBadge: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 16,
+    gap: 3,
   },
 
   emailLabel: {
-    fontSize: 14,
-    color: "#737373",
+    fontSize: 13,
   },
 
   email: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#111111",
-  },
-
-  feedbackContainer: {
-    minHeight: 48,
-    justifyContent: "center",
   },
 
   apiError: {
     padding: 14,
-    borderRadius: 14,
-    backgroundColor: "#FFF1F0",
+    borderRadius: 16,
   },
 
   apiErrorText: {
-    color: "#B42318",
     fontSize: 14,
     fontWeight: "500",
   },

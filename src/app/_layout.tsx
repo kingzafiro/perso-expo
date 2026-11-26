@@ -1,33 +1,31 @@
 import "@/lib/api/interceptors";
 
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import { restoreSession } from "@/lib/auth/session";
 import { queryClient } from "@/lib/query/client";
 import { useAuthStore } from "@/stores/auth.store";
+import { usePreferencesStore } from "@/stores/preferences.store";
 
-import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
-} from "@react-navigation/native";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import { useColorScheme } from "react-native";
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-
   const isLoading = useAuthStore((state) => state.isLoading);
+  const needsOnboarding = useAuthStore((state) => state.needsOnboarding);
+  const hydratePreferences = usePreferencesStore((state) => state.hydrate);
 
   useEffect(() => {
+    hydratePreferences();
     restoreSession();
-  }, []);
+  }, [hydratePreferences]);
 
   if (isLoading) {
     return <AnimatedSplashOverlay />;
@@ -36,12 +34,17 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+        <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Protected guard={!isAuthenticated}>
             <Stack.Screen name="(auth)" />
           </Stack.Protected>
 
-          <Stack.Protected guard={isAuthenticated}>
+          <Stack.Protected guard={isAuthenticated && needsOnboarding}>
+            <Stack.Screen name="(onboarding)" />
+          </Stack.Protected>
+
+          <Stack.Protected guard={isAuthenticated && !needsOnboarding}>
             <Stack.Screen name="(app)" />
           </Stack.Protected>
         </Stack>

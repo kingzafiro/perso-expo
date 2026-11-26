@@ -1,52 +1,53 @@
+import { Link } from "expo-router";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+
+import { AuthSheetLayout } from "@/features/auth/components/AuthSheetLayout";
 import { RegisterForm } from "@/features/auth/components/RegisterForm";
-import { StyleSheet, Text, View } from "react-native";
+import { useTheme } from "@/hooks/use-theme";
 
 export default function RegistroScreen() {
+  const theme = useTheme();
+
   return (
-    <View style={styles.screen}>
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Crear cuenta</Text>
-
-          <Text style={styles.subtitle}>
-            Regístrate para comenzar a usar Perso.
+    <AuthSheetLayout
+      title="Crear cuenta"
+      subtitle="Regístrate para comenzar a usar Perso."
+      showBackButton
+      footer={
+        <View style={styles.footerRow}>
+          <Text style={[styles.footerText, { color: theme.textSecondary }]}>
+            ¿Ya tienes una cuenta?
           </Text>
-        </View>
 
-        <RegisterForm />
-      </View>
-    </View>
+          <Link href="/(auth)/login" asChild>
+            <Pressable hitSlop={8}>
+              <Text style={[styles.loginText, { color: theme.primary }]}>
+                Iniciar sesión
+              </Text>
+            </Pressable>
+          </Link>
+        </View>
+      }
+    >
+      <RegisterForm />
+    </AuthSheetLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
+  footerRow: {
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 24,
+    gap: 6,
   },
 
-  content: {
-    width: "100%",
-    maxWidth: 440,
-    alignSelf: "center",
+  footerText: {
+    fontSize: 15,
   },
 
-  header: {
-    marginBottom: 32,
-  },
-
-  title: {
-    fontSize: 32,
+  loginText: {
+    fontSize: 15,
     fontWeight: "700",
-    color: "#111111",
-  },
-
-  subtitle: {
-    marginTop: 8,
-    fontSize: 16,
-    lineHeight: 23,
-    color: "#666666",
   },
 });

@@ -1,11 +1,13 @@
-import { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import {
-    StyleSheet,
-    Text,
-    TextInput,
-    TextInputProps,
-    View,
+  StyleSheet,
+  Text,
+  TextInput,
+  type TextInputProps,
+  View,
 } from "react-native";
+
+import { useTheme } from "@/hooks/use-theme";
 
 interface AppInputProps extends TextInputProps {
   label?: string;
@@ -18,19 +20,45 @@ export function AppInput({
   error,
   rightElement,
   style,
+  onFocus,
+  onBlur,
   ...props
 }: AppInputProps) {
+  const theme = useTheme();
+  const [isFocused, setIsFocused] = useState(false);
+
+  const borderColor = error
+    ? theme.errorBorder
+    : isFocused
+      ? theme.inputBorderFocused
+      : theme.inputBorder;
+
   return (
     <View style={styles.container}>
-      {label && <Text style={styles.label}>{label}</Text>}
+      {label && (
+        <Text style={[styles.label, { color: theme.text }]}>{label}</Text>
+      )}
 
       <View
-        style={[styles.inputContainer, error && styles.inputContainerError]}
+        style={[
+          styles.inputContainer,
+          { backgroundColor: theme.inputBackground, borderColor },
+        ]}
       >
         <TextInput
           {...props}
-          style={[styles.input, style]}
-          placeholderTextColor="#8B8B8B"
+          selectionColor={theme.primary}
+          cursorColor={theme.primary}
+          onFocus={(e) => {
+            setIsFocused(true);
+            onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            setIsFocused(false);
+            onBlur?.(e);
+          }}
+          style={[styles.input, { color: theme.text }, style]}
+          placeholderTextColor={theme.textMuted}
         />
 
         {rightElement && (
@@ -38,53 +66,48 @@ export function AppInput({
         )}
       </View>
 
-      {error && <Text style={styles.errorText}>{error}</Text>}
+      {error && (
+        <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    gap: 8,
+    gap: 7,
   },
 
   label: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
-    color: "#252525",
+    marginLeft: 2,
   },
 
   inputContainer: {
-    minHeight: 58,
-    borderRadius: 16,
-    backgroundColor: "#F2F2F2",
-    borderWidth: 1.5,
-    borderColor: "transparent",
+    minHeight: 54,
+    borderRadius: 18,
+    borderWidth: 1,
     flexDirection: "row",
     alignItems: "center",
   },
 
-  inputContainerError: {
-    borderColor: "#D92D20",
-  },
-
   input: {
     flex: 1,
-    minHeight: 58,
-    paddingHorizontal: 18,
-    fontSize: 17,
-    color: "#111111",
+    minHeight: 54,
+    paddingHorizontal: 16,
+    fontSize: 16,
   },
 
   rightElement: {
-    paddingRight: 16,
+    paddingRight: 14,
     alignItems: "center",
     justifyContent: "center",
   },
 
   errorText: {
-    color: "#D92D20",
     fontSize: 13,
+    fontWeight: "500",
     marginLeft: 4,
   },
 });

@@ -1,13 +1,6 @@
 import { useLocalSearchParams } from "expo-router";
-import {
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AuthSheetLayout } from "@/features/auth/components/AuthSheetLayout";
 import { VerifyRecoveryForm } from "@/features/auth/components/VerifyRecoveryForm";
 
 export default function VerificarRecuperacionScreen() {
@@ -20,44 +13,12 @@ export default function VerificarRecuperacionScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView
-        style={styles.keyboard}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.container}>
-            <VerifyRecoveryForm email={email} />
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    <AuthSheetLayout
+      title="Verifica tu código"
+      subtitle="Ingresa el código de 6 dígitos que enviamos a tu correo."
+      showBackButton
+    >
+      <VerifyRecoveryForm email={email} />
+    </AuthSheetLayout>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
-
-  keyboard: {
-    flex: 1,
-  },
-
-  content: {
-    flexGrow: 1,
-    justifyContent: "center",
-    paddingHorizontal: 24,
-    paddingVertical: 32,
-  },
-
-  container: {
-    width: "100%",
-    maxWidth: 480,
-    alignSelf: "center",
-  },
-});

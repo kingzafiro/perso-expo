@@ -31,6 +31,10 @@ async function removeItem(key: string) {
 }
 
 export const secureStorage = {
+  getItem,
+  setItem,
+  removeItem,
+
   getAccessToken() {
     return getItem(ACCESS_TOKEN_KEY);
   },

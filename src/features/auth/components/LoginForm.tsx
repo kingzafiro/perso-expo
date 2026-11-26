@@ -1,36 +1,32 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Eye, EyeOff } from "lucide-react-native";
-import { useState } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { AxiosError } from "axios";
+import { router } from "expo-router";
+import { useForm } from "react-hook-form";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
-import { AppInput } from "@/components/ui/AppInput";
+import { FormInput } from "@/components/ui/FormInput";
+import { SocialAuthButtons } from "@/features/auth/components/SocialAuthButtons";
 import { useLogin } from "@/features/auth/hooks/use-login";
 import {
   loginSchema,
   type LoginFormData,
 } from "@/features/auth/schemas/login.schema";
-import { AxiosError } from "axios";
-import { router } from "expo-router";
-import { ApiErrorResponse } from "../types/auth.types";
+import type { ApiErrorResponse } from "@/features/auth/types/auth.types";
+import { useTheme } from "@/hooks/use-theme";
 
 export function LoginForm() {
+  const theme = useTheme();
   const loginMutation = useLogin();
-  const [showPassword, setShowPassword] = useState(false);
 
-  const loginError = loginMutation.error as AxiosError<ApiErrorResponse>;
+  const loginError = loginMutation.error as AxiosError<ApiErrorResponse> | null;
 
   const errorMessage =
     loginError?.response?.data?.mensaje ?? "No fue posible iniciar sesión.";
 
   const errorCode = loginError?.response?.data?.codigo;
 
-  const {
-    control,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<LoginFormData>({
+  const { control, handleSubmit, getValues } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
 
     defaultValues: {
@@ -40,63 +36,36 @@ export function LoginForm() {
   });
 
   const onSubmit = (data: LoginFormData) => {
-    loginMutation.mutate(data);
+    loginMutation.mutate({
+      email: data.email.trim().toLowerCase(),
+      password: data.password,
+    });
   };
 
   return (
     <View style={styles.container}>
-      <Controller
+      <FormInput
         control={control}
         name="email"
-        render={({ field: { onChange, onBlur, value } }) => (
-          <AppInput
-            label="Correo electrónico"
-            placeholder="correo@ejemplo.com"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="email"
-            value={value}
-            onChangeText={onChange}
-            onBlur={onBlur}
-            error={errors.email?.message}
-          />
-        )}
+        label="Correo electrónico"
+        placeholder="correo@ejemplo.com"
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="email"
+        textContentType="emailAddress"
       />
 
-      <Controller
+      <FormInput
         control={control}
         name="password"
-        render={({ field: { onChange, onBlur, value } }) => (
-          <AppInput
-            label="Contraseña"
-            placeholder="Tu contraseña"
-            secureTextEntry={!showPassword}
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="current-password"
-            value={value}
-            onChangeText={onChange}
-            onBlur={onBlur}
-            error={errors.password?.message}
-            rightElement={
-              <Pressable
-                hitSlop={12}
-                onPress={() => setShowPassword((current) => !current)}
-                style={({ pressed }) => [
-                  styles.eyeButton,
-                  pressed && styles.eyeButtonPressed,
-                ]}
-              >
-                {showPassword ? (
-                  <EyeOff size={22} color="#5F5F5F" />
-                ) : (
-                  <Eye size={22} color="#5F5F5F" />
-                )}
-              </Pressable>
-            }
-          />
-        )}
+        label="Contraseña"
+        placeholder="Tu contraseña"
+        isPassword
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="current-password"
+        textContentType="password"
       />
 
       <Pressable
@@ -105,25 +74,50 @@ export function LoginForm() {
         }}
         style={({ pressed }) => [
           styles.forgotButton,
-          pressed && styles.forgotButtonPressed,
+          pressed && styles.pressed,
         ]}
       >
-        <Text style={styles.forgotText}>¿Olvidaste tu contraseña?</Text>
+        <Text style={[styles.forgotText, { color: theme.primary }]}>
+          ¿Olvidaste tu contraseña?
+        </Text>
       </Pressable>
 
-      <View style={styles.errorContainer}>
-        {loginMutation.isError && (
-          <View style={styles.apiError}>
-            <Text style={styles.apiErrorText}>{errorMessage}</Text>
-          </View>
-        )}
-      </View>
+      {loginMutation.isError && (
+        <View style={[styles.apiError, { backgroundColor: theme.errorSoft }]}>
+          <Text style={[styles.apiErrorText, { color: theme.error }]}>
+            {errorMessage}
+          </Text>
+
+          {errorCode === "EMAIL_NO_VERIFICADO" && (
+            <Pressable
+              onPress={() => {
+                const email = getValues("email").trim().toLowerCase();
+                if (!email) return;
+                router.push({
+                  pathname: "/(auth)/verificar-email",
+                  params: { email },
+                });
+              }}
+              style={({ pressed }) => [
+                styles.verifyLinkButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={[styles.verifyLinkText, { color: theme.primary }]}>
+                Verificar mi correo
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      )}
 
       <AppButton
         title="Iniciar sesión"
         loading={loginMutation.isPending}
         onPress={handleSubmit(onSubmit)}
       />
+
+      <SocialAuthButtons dividerText="o continúa con" />
     </View>
   );
 }
@@ -131,47 +125,41 @@ export function LoginForm() {
 const styles = StyleSheet.create({
   container: {
     width: "100%",
-    gap: 20,
+    gap: 16,
   },
 
-  eyeButton: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  eyeButtonPressed: {
-    opacity: 0.5,
-  },
-
-  forgotButton: {
-    alignSelf: "flex-start",
-    marginTop: -6,
-  },
-
-  forgotButtonPressed: {
+  pressed: {
     opacity: 0.6,
   },
 
-  forgotText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#111111",
+  forgotButton: {
+    alignSelf: "flex-end",
+    marginTop: -6,
   },
 
-  errorContainer: {
-    minHeight: 48,
-    justifyContent: "center",
+  forgotText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
 
   apiError: {
     padding: 14,
-    borderRadius: 14,
-    backgroundColor: "#FFF1F0",
+    borderRadius: 16,
+    gap: 8,
   },
 
   apiErrorText: {
-    color: "#B42318",
     fontSize: 14,
     fontWeight: "500",
+    lineHeight: 19,
+  },
+
+  verifyLinkButton: {
+    alignSelf: "flex-start",
+  },
+
+  verifyLinkText: {
+    fontSize: 14,
+    fontWeight: "700",
   },
 });

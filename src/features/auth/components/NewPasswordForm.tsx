@@ -10,11 +10,11 @@ import { z } from "zod";
 import { AppButton } from "@/components/ui/AppButton";
 import { AppInput } from "@/components/ui/AppInput";
 import { useResetPassword } from "@/features/auth/hooks/use-reset-password";
+import { useTheme } from "@/hooks/use-theme";
 
 const newPasswordSchema = z
   .object({
     password: z.string().min(8, "La contraseña debe tener mínimo 8 caracteres"),
-
     confirmPassword: z.string().min(1, "Confirma tu nueva contraseña"),
   })
   .refine((data) => data.password === data.confirmPassword, {
@@ -35,10 +35,10 @@ interface NewPasswordFormProps {
 }
 
 export function NewPasswordForm({ resetToken }: NewPasswordFormProps) {
+  const theme = useTheme();
   const resetPasswordMutation = useResetPassword();
 
   const [showPassword, setShowPassword] = useState(false);
-
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const {
@@ -68,7 +68,8 @@ export function NewPasswordForm({ resetToken }: NewPasswordFormProps) {
     );
   };
 
-  const apiError = resetPasswordMutation.error as AxiosError<ApiErrorResponse>;
+  const apiError =
+    resetPasswordMutation.error as AxiosError<ApiErrorResponse> | null;
 
   const errorMessage =
     apiError?.response?.data?.mensaje ??
@@ -76,14 +77,6 @@ export function NewPasswordForm({ resetToken }: NewPasswordFormProps) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Crea una nueva contraseña</Text>
-
-        <Text style={styles.description}>
-          Ingresa una nueva contraseña para recuperar el acceso a tu cuenta.
-        </Text>
-      </View>
-
       <Controller
         control={control}
         name="password"
@@ -94,6 +87,8 @@ export function NewPasswordForm({ resetToken }: NewPasswordFormProps) {
             secureTextEntry={!showPassword}
             autoCapitalize="none"
             autoCorrect={false}
+            autoComplete="new-password"
+            textContentType="newPassword"
             value={value}
             onChangeText={onChange}
             onBlur={onBlur}
@@ -104,9 +99,9 @@ export function NewPasswordForm({ resetToken }: NewPasswordFormProps) {
                 hitSlop={10}
               >
                 {showPassword ? (
-                  <EyeOff size={20} color="#737373" />
+                  <EyeOff size={20} color={theme.icon} />
                 ) : (
-                  <Eye size={20} color="#737373" />
+                  <Eye size={20} color={theme.icon} />
                 )}
               </Pressable>
             }
@@ -124,6 +119,8 @@ export function NewPasswordForm({ resetToken }: NewPasswordFormProps) {
             secureTextEntry={!showConfirmPassword}
             autoCapitalize="none"
             autoCorrect={false}
+            autoComplete="new-password"
+            textContentType="newPassword"
             value={value}
             onChangeText={onChange}
             onBlur={onBlur}
@@ -134,9 +131,9 @@ export function NewPasswordForm({ resetToken }: NewPasswordFormProps) {
                 hitSlop={10}
               >
                 {showConfirmPassword ? (
-                  <EyeOff size={20} color="#737373" />
+                  <EyeOff size={20} color={theme.icon} />
                 ) : (
-                  <Eye size={20} color="#737373" />
+                  <Eye size={20} color={theme.icon} />
                 )}
               </Pressable>
             }
@@ -144,13 +141,13 @@ export function NewPasswordForm({ resetToken }: NewPasswordFormProps) {
         )}
       />
 
-      <View style={styles.feedbackContainer}>
-        {resetPasswordMutation.isError && (
-          <View style={styles.apiError}>
-            <Text style={styles.apiErrorText}>{errorMessage}</Text>
-          </View>
-        )}
-      </View>
+      {resetPasswordMutation.isError && (
+        <View style={[styles.apiError, { backgroundColor: theme.errorSoft }]}>
+          <Text style={[styles.apiErrorText, { color: theme.error }]}>
+            {errorMessage}
+          </Text>
+        </View>
+      )}
 
       <AppButton
         title="Cambiar contraseña"
@@ -164,38 +161,15 @@ export function NewPasswordForm({ resetToken }: NewPasswordFormProps) {
 const styles = StyleSheet.create({
   container: {
     width: "100%",
-    gap: 20,
-  },
-
-  header: {
-    gap: 8,
-  },
-
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#111111",
-  },
-
-  description: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: "#737373",
-  },
-
-  feedbackContainer: {
-    minHeight: 48,
-    justifyContent: "center",
+    gap: 18,
   },
 
   apiError: {
     padding: 14,
-    borderRadius: 14,
-    backgroundColor: "#FFF1F0",
+    borderRadius: 16,
   },
 
   apiErrorText: {
-    color: "#B42318",
     fontSize: 14,
     fontWeight: "500",
   },

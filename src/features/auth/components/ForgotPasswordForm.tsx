@@ -8,6 +8,7 @@ import { z } from "zod";
 import { AppButton } from "@/components/ui/AppButton";
 import { AppInput } from "@/components/ui/AppInput";
 import { useForgotPassword } from "@/features/auth/hooks/use-forgot-password";
+import { useTheme } from "@/hooks/use-theme";
 
 const forgotPasswordSchema = z.object({
   email: z
@@ -25,6 +26,7 @@ interface ApiErrorResponse {
 }
 
 export function ForgotPasswordForm() {
+  const theme = useTheme();
   const forgotPasswordMutation = useForgotPassword();
 
   const {
@@ -59,7 +61,8 @@ export function ForgotPasswordForm() {
     );
   };
 
-  const apiError = forgotPasswordMutation.error as AxiosError<ApiErrorResponse>;
+  const apiError =
+    forgotPasswordMutation.error as AxiosError<ApiErrorResponse> | null;
 
   const errorMessage =
     apiError?.response?.data?.mensaje ??
@@ -67,15 +70,6 @@ export function ForgotPasswordForm() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Recupera tu contraseña</Text>
-
-        <Text style={styles.description}>
-          Ingresa el correo asociado a tu cuenta. Te enviaremos un código para
-          continuar.
-        </Text>
-      </View>
-
       <Controller
         control={control}
         name="email"
@@ -86,6 +80,8 @@ export function ForgotPasswordForm() {
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
+            autoComplete="email"
+            textContentType="emailAddress"
             value={value}
             onChangeText={onChange}
             onBlur={onBlur}
@@ -94,13 +90,13 @@ export function ForgotPasswordForm() {
         )}
       />
 
-      <View style={styles.errorContainer}>
-        {forgotPasswordMutation.isError && (
-          <View style={styles.apiError}>
-            <Text style={styles.apiErrorText}>{errorMessage}</Text>
-          </View>
-        )}
-      </View>
+      {forgotPasswordMutation.isError && (
+        <View style={[styles.apiError, { backgroundColor: theme.errorSoft }]}>
+          <Text style={[styles.apiErrorText, { color: theme.error }]}>
+            {errorMessage}
+          </Text>
+        </View>
+      )}
 
       <AppButton
         title="Enviar código"
@@ -114,39 +110,17 @@ export function ForgotPasswordForm() {
 const styles = StyleSheet.create({
   container: {
     width: "100%",
-    gap: 20,
-  },
-
-  header: {
-    gap: 8,
-  },
-
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#111111",
-  },
-
-  description: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: "#737373",
-  },
-
-  errorContainer: {
-    minHeight: 48,
-    justifyContent: "center",
+    gap: 18,
   },
 
   apiError: {
     padding: 14,
-    borderRadius: 14,
-    backgroundColor: "#FFF1F0",
+    borderRadius: 16,
   },
 
   apiErrorText: {
-    color: "#B42318",
     fontSize: 14,
     fontWeight: "500",
+    lineHeight: 19,
   },
 });

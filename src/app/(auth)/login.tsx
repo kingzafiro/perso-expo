@@ -1,123 +1,52 @@
-import { LoginForm } from "@/features/auth/components/LoginForm";
 import { Link } from "expo-router";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+
+import { AuthSheetLayout } from "@/features/auth/components/AuthSheetLayout";
+import { LoginForm } from "@/features/auth/components/LoginForm";
+import { useTheme } from "@/hooks/use-theme";
 
 export default function LoginScreen() {
+  const theme = useTheme();
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView
-        style={styles.keyboardView}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <View style={styles.container}>
-          <View style={styles.header}>
-            <View style={styles.logo}>
-              <Text style={styles.logoText}>P</Text>
-            </View>
+    <AuthSheetLayout
+      title="Bienvenido de nuevo"
+      subtitle="Ingresa con tu correo, Apple o Google para continuar."
+      footer={
+        <View style={styles.footerRow}>
+          <Text style={[styles.footerText, { color: theme.textSecondary }]}>
+            ¿Aún no tienes cuenta?
+          </Text>
 
-            <Text style={styles.title}>Bienvenido de nuevo</Text>
-
-            <Text style={styles.subtitle}>
-              Ingresa a tu cuenta para continuar.
-            </Text>
-          </View>
-
-          <LoginForm />
-
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>¿Aún no tienes cuenta?</Text>
-
-            <Link href="/(auth)/registro" asChild>
-              <Pressable>
-                <Text style={styles.registerText}>Crear cuenta</Text>
-              </Pressable>
-            </Link>
-          </View>
+          <Link href="/(auth)/registro" asChild>
+            <Pressable hitSlop={8}>
+              <Text style={[styles.registerText, { color: theme.primary }]}>
+                Crear cuenta
+              </Text>
+            </Pressable>
+          </Link>
         </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      }
+    >
+      <LoginForm />
+    </AuthSheetLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
-
-  keyboardView: {
-    flex: 1,
-  },
-
-  container: {
-    flex: 1,
-    width: "100%",
-    maxWidth: 480,
-    alignSelf: "center",
-    paddingHorizontal: 24,
-    paddingTop: 48,
-    paddingBottom: 24,
-  },
-
-  header: {
-    marginBottom: 42,
-  },
-
-  logo: {
-    width: 52,
-    height: 52,
-    borderRadius: 17,
-    backgroundColor: "#111111",
+  footerRow: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 32,
-  },
-
-  logoText: {
-    color: "#FFFFFF",
-    fontSize: 27,
-    fontWeight: "800",
-  },
-
-  title: {
-    fontSize: 36,
-    lineHeight: 42,
-    fontWeight: "800",
-    letterSpacing: -1,
-    color: "#111111",
-  },
-
-  subtitle: {
-    marginTop: 10,
-    fontSize: 17,
-    lineHeight: 24,
-    color: "#707070",
-  },
-
-  footer: {
-    marginTop: "auto",
-    paddingTop: 32,
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 5,
+    gap: 6,
   },
 
   footerText: {
     fontSize: 15,
-    color: "#777777",
   },
 
   registerText: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#111111",
   },
 });

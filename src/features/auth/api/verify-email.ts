@@ -1,3 +1,4 @@
+import type { VerifyEmailResponse } from "@/features/auth/types/auth.types";
 import { apiClient } from "@/lib/api/client";
 
 interface VerifyEmailRequest {
@@ -5,12 +6,7 @@ interface VerifyEmailRequest {
   codigo: string;
 }
 
-export interface VerifyEmailResponse {
-  ok: boolean;
-  mensaje: string;
-  accessToken: string;
-  refreshToken: string;
-}
+export type { VerifyEmailResponse };
 
 export async function verifyEmail(
   payload: VerifyEmailRequest,

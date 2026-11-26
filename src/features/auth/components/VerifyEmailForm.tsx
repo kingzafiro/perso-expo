@@ -17,6 +17,7 @@ import { AppButton } from "@/components/ui/AppButton";
 import { AppInput } from "@/components/ui/AppInput";
 import { useResendVerificationCode } from "@/features/auth/hooks/use-resend-verification-code";
 import { useVerifyEmail } from "@/features/auth/hooks/use-verify-email";
+import { useTheme } from "@/hooks/use-theme";
 
 const verifyEmailSchema = z.object({
   codigo: z
@@ -39,11 +40,11 @@ interface VerifyEmailFormProps {
 }
 
 export function VerifyEmailForm({ email }: VerifyEmailFormProps) {
+  const theme = useTheme();
   const verifyMutation = useVerifyEmail();
   const resendMutation = useResendVerificationCode();
 
   const [secondsLeft, setSecondsLeft] = useState(60);
-
   const [resendMessage, setResendMessage] = useState<string | null>(null);
 
   const {
@@ -64,13 +65,7 @@ export function VerifyEmailForm({ email }: VerifyEmailFormProps) {
     }
 
     const timer = setInterval(() => {
-      setSecondsLeft((current) => {
-        if (current <= 1) {
-          return 0;
-        }
-
-        return current - 1;
-      });
+      setSecondsLeft((current) => (current <= 1 ? 0 : current - 1));
     }, 1000);
 
     return () => {
@@ -116,13 +111,11 @@ export function VerifyEmailForm({ email }: VerifyEmailFormProps) {
       {
         onSuccess: (data) => {
           setSecondsLeft(data.retryAfter ?? 60);
-
           setResendMessage(data.mensaje);
         },
 
         onError: (error) => {
           const apiError = error as AxiosError<ApiErrorResponse>;
-
           const retryAfter = apiError.response?.data?.retryAfter;
 
           if (retryAfter) {
@@ -133,21 +126,18 @@ export function VerifyEmailForm({ email }: VerifyEmailFormProps) {
     );
   };
 
-  const verifyError = verifyMutation.error as AxiosError<ApiErrorResponse>;
-
+  const verifyError = verifyMutation.error as AxiosError<ApiErrorResponse> | null;
   const verifyErrorMessage =
     verifyError?.response?.data?.mensaje ??
     "No fue posible verificar el correo.";
 
-  const resendError = resendMutation.error as AxiosError<ApiErrorResponse>;
-
+  const resendError = resendMutation.error as AxiosError<ApiErrorResponse> | null;
   const resendErrorMessage =
     resendError?.response?.data?.mensaje ??
     "No fue posible reenviar el código.";
 
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
-
     const remainingSeconds = seconds % 60;
 
     return `${minutes.toString().padStart(2, "0")}:${remainingSeconds
@@ -157,10 +147,13 @@ export function VerifyEmailForm({ email }: VerifyEmailFormProps) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.emailContainer}>
-        <Text style={styles.emailLabel}>Código enviado a</Text>
-
-        <Text style={styles.email}>{email}</Text>
+      <View
+        style={[styles.emailBadge, { backgroundColor: theme.inputBackground }]}
+      >
+        <Text style={[styles.emailLabel, { color: theme.textSecondary }]}>
+          Código enviado a
+        </Text>
+        <Text style={[styles.email, { color: theme.text }]}>{email}</Text>
       </View>
 
       <Controller
@@ -172,10 +165,10 @@ export function VerifyEmailForm({ email }: VerifyEmailFormProps) {
             placeholder="000000"
             keyboardType="number-pad"
             autoCorrect={false}
+            textContentType="oneTimeCode"
             value={value}
             onChangeText={(text) => {
               const codigo = text.replace(/\D/g, "").slice(0, 6);
-
               onChange(codigo);
 
               if (codigo.length === 6) {
@@ -190,10 +183,12 @@ export function VerifyEmailForm({ email }: VerifyEmailFormProps) {
       />
 
       <View style={styles.resendRow}>
-        <Text style={styles.resendText}>¿No recibiste el código?</Text>
+        <Text style={[styles.resendText, { color: theme.textSecondary }]}>
+          ¿No recibiste el código?
+        </Text>
 
         {secondsLeft > 0 ? (
-          <Text style={styles.resendTimer}>
+          <Text style={[styles.resendTimer, { color: theme.textSecondary }]}>
             Reenviar en {formatTime(secondsLeft)}
           </Text>
         ) : (
@@ -203,38 +198,45 @@ export function VerifyEmailForm({ email }: VerifyEmailFormProps) {
             hitSlop={10}
             style={({ pressed }) => [
               styles.resendButton,
-
-              pressed && styles.resendButtonPressed,
+              pressed && styles.pressed,
             ]}
           >
             {resendMutation.isPending ? (
-              <ActivityIndicator size="small" />
+              <ActivityIndicator size="small" color={theme.primary} />
             ) : (
-              <Text style={styles.resendButtonText}>Reenviar código</Text>
+              <Text style={[styles.resendButtonText, { color: theme.primary }]}>
+                Reenviar código
+              </Text>
             )}
           </Pressable>
         )}
       </View>
 
-      <View style={styles.feedbackContainer}>
-        {verifyMutation.isError && (
-          <View style={styles.apiError}>
-            <Text style={styles.apiErrorText}>{verifyErrorMessage}</Text>
-          </View>
-        )}
+      {verifyMutation.isError && (
+        <View style={[styles.apiError, { backgroundColor: theme.errorSoft }]}>
+          <Text style={[styles.apiErrorText, { color: theme.error }]}>
+            {verifyErrorMessage}
+          </Text>
+        </View>
+      )}
 
-        {resendMutation.isError && (
-          <View style={styles.apiError}>
-            <Text style={styles.apiErrorText}>{resendErrorMessage}</Text>
-          </View>
-        )}
+      {resendMutation.isError && (
+        <View style={[styles.apiError, { backgroundColor: theme.errorSoft }]}>
+          <Text style={[styles.apiErrorText, { color: theme.error }]}>
+            {resendErrorMessage}
+          </Text>
+        </View>
+      )}
 
-        {resendMessage && !resendMutation.isError && (
-          <View style={styles.apiSuccess}>
-            <Text style={styles.apiSuccessText}>{resendMessage}</Text>
-          </View>
-        )}
-      </View>
+      {resendMessage && !resendMutation.isError && (
+        <View
+          style={[styles.apiSuccess, { backgroundColor: theme.successSoft }]}
+        >
+          <Text style={[styles.apiSuccessText, { color: theme.success }]}>
+            {resendMessage}
+          </Text>
+        </View>
+      )}
 
       <AppButton
         title={verifyMutation.isPending ? "Verificando" : "Verificar correo"}
@@ -248,22 +250,23 @@ export function VerifyEmailForm({ email }: VerifyEmailFormProps) {
 const styles = StyleSheet.create({
   container: {
     width: "100%",
-    gap: 20,
+    gap: 18,
   },
 
-  emailContainer: {
-    gap: 4,
+  emailBadge: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 16,
+    gap: 3,
   },
 
   emailLabel: {
-    fontSize: 14,
-    color: "#737373",
+    fontSize: 13,
   },
 
   email: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#111111",
   },
 
   resendRow: {
@@ -271,18 +274,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexWrap: "wrap",
-    gap: 5,
+    gap: 6,
   },
 
   resendText: {
     fontSize: 14,
-    color: "#737373",
   },
 
   resendTimer: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#9A9A9A",
   },
 
   resendButton: {
@@ -292,41 +293,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
 
-  resendButtonPressed: {
+  pressed: {
     opacity: 0.6,
   },
 
   resendButtonText: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#208AEF",
-  },
-
-  feedbackContainer: {
-    minHeight: 48,
-    justifyContent: "center",
   },
 
   apiError: {
     padding: 14,
-    borderRadius: 14,
-    backgroundColor: "#FFF1F0",
+    borderRadius: 16,
   },
 
   apiErrorText: {
-    color: "#B42318",
     fontSize: 14,
     fontWeight: "500",
   },
 
   apiSuccess: {
     padding: 14,
-    borderRadius: 14,
-    backgroundColor: "#ECFDF3",
+    borderRadius: 16,
   },
 
   apiSuccessText: {
-    color: "#027A48",
     fontSize: 14,
     fontWeight: "500",
   },
