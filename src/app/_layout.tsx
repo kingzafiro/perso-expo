@@ -5,6 +5,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { restoreSession } from "@/lib/auth/session";
 import { queryClient } from "@/lib/query/client";
 import { useAuthStore } from "@/stores/auth.store";
+import { useEmployerStore } from "@/stores/employer.store";
 import { usePreferencesStore } from "@/stores/preferences.store";
 
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -21,11 +22,13 @@ export default function RootLayout() {
   const isLoading = useAuthStore((state) => state.isLoading);
   const needsOnboarding = useAuthStore((state) => state.needsOnboarding);
   const hydratePreferences = usePreferencesStore((state) => state.hydrate);
+  const hydrateEmployer = useEmployerStore((state) => state.hydrate);
 
   useEffect(() => {
     hydratePreferences();
+    hydrateEmployer();
     restoreSession();
-  }, [hydratePreferences]);
+  }, [hydratePreferences, hydrateEmployer]);
 
   if (isLoading) {
     return <AnimatedSplashOverlay />;
@@ -46,6 +49,13 @@ export default function RootLayout() {
 
           <Stack.Protected guard={isAuthenticated && !needsOnboarding}>
             <Stack.Screen name="(app)" />
+            <Stack.Screen
+              name="(employer)"
+              options={{
+                presentation: "fullScreenModal",
+                animation: "slide_from_bottom",
+              }}
+            />
           </Stack.Protected>
         </Stack>
       </ThemeProvider>
