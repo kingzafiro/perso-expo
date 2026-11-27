@@ -1,7 +1,14 @@
 import { Appearance, Platform } from "react-native";
 import { create } from "zustand";
 
+import {
+  getNotificationPreferencesApi,
+  updateNotificationPreferencesApi,
+} from "@/features/notifications/api/notifications.api";
+import type { NotificationPreferences } from "@/features/notifications/types/notifications.types";
 import { secureStorage } from "@/lib/storage/secure-storage";
+
+export type { NotificationPreferences };
 
 export type ColorSchemePreference = "system" | "light" | "dark";
 
@@ -15,13 +22,6 @@ export type PersoAppIconId =
   | "midnight"
   | "amber"
   | "graphite";
-
-export interface NotificationPreferences {
-  empleos: boolean;
-  postulaciones: boolean;
-  correo: boolean;
-  seguridad: boolean;
-}
 
 const COLOR_SCHEME_KEY = "perso_color_scheme";
 const APP_ICON_KEY = "perso_app_icon";
@@ -61,6 +61,10 @@ interface PreferencesActions {
     key: keyof NotificationPreferences,
     value: boolean,
   ) => Promise<void>;
+  setNotificationsBulk: (
+    patch: Partial<NotificationPreferences>,
+  ) => Promise<void>;
+  syncNotificationsFromServer: () => Promise<void>;
 }
 
 export const usePreferencesStore = create<
@@ -147,7 +151,58 @@ export const usePreferencesStore = create<
     try {
       await secureStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(next));
     } catch {
-      // No bloquear UI si falla persistencia
+      // No bloquear UI si falla persistencia local
+    }
+
+    try {
+      const accessToken = await secureStorage.getAccessToken();
+      if (accessToken) {
+        await updateNotificationPreferencesApi({ [key]: value });
+      }
+    } catch {
+      // No bloquear UI si falla sincronización remota
+    }
+  },
+
+  setNotificationsBulk: async (patch) => {
+    const next = {
+      ...get().notifications,
+      ...patch,
+    };
+
+    set({ notifications: next });
+
+    try {
+      await secureStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(next));
+    } catch {
+      // No bloquear UI si falla persistencia local
+    }
+
+    try {
+      const accessToken = await secureStorage.getAccessToken();
+      if (accessToken) {
+        await updateNotificationPreferencesApi(patch);
+      }
+    } catch {
+      // No bloquear UI si falla sincronización remota
+    }
+  },
+
+  syncNotificationsFromServer: async () => {
+    try {
+      const accessToken = await secureStorage.getAccessToken();
+      if (!accessToken) return;
+
+      const remote = await getNotificationPreferencesApi();
+      const merged = {
+        ...DEFAULT_NOTIFICATIONS,
+        ...remote,
+      };
+
+      set({ notifications: merged });
+      await secureStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(merged));
+    } catch {
+      // Mantener preferencias locales si falla red o backend
     }
   },
 }));

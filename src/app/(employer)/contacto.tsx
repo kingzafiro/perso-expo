@@ -1,38 +1,39 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import axios from "axios";
 import { router } from "expo-router";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { StyleSheet, Text, View } from "react-native";
-import { z } from "zod";
+import { Alert, StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
 import { FormInput } from "@/components/ui/FormInput";
 import { AuthSheetLayout } from "@/features/auth/components/AuthSheetLayout";
+import {
+  contactStepSchema,
+  type ContactStepForm,
+} from "@/features/employer/schemas/employer.schemas";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuthStore } from "@/stores/auth.store";
 import { useEmployerStore } from "@/stores/employer.store";
 
-const contactStepSchema = z.object({
-  contactName: z.string().trim().min(2, "Ingresa el nombre del responsable"),
-  contactRole: z.string().trim().min(2, "Indica tu puesto o cargo"),
-  workEmail: z.string().trim().email("Ingresa un correo electrónico válido"),
-  phone: z
-    .string()
-    .trim()
-    .regex(/^\d{10}$/, "El teléfono debe contener 10 dígitos"),
-  description: z
-    .string()
-    .trim()
-    .min(15, "Describe brevemente tu empresa (mínimo 15 caracteres)")
-    .max(300, "Máximo 300 caracteres"),
-});
-
-type ContactStepForm = z.infer<typeof contactStepSchema>;
+function extractErrorMessage(error: unknown) {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data as { mensaje?: string } | undefined;
+    if (data?.mensaje) return data.mensaje;
+  }
+  return "No pudimos guardar tu perfil de empresa. Verifica tu conexión e intenta de nuevo.";
+}
 
 export default function EmployerContactStepScreen() {
   const theme = useTheme();
   const user = useAuthStore((state) => state.user);
   const draft = useEmployerStore((state) => state.draft);
+  const hasAccess = useEmployerStore((state) => state.hasAccess);
   const updateDraft = useEmployerStore((state) => state.updateDraft);
+  const saveProfileToServer = useEmployerStore(
+    (state) => state.saveProfileToServer,
+  );
+  const [saving, setSaving] = useState(false);
 
   const defaultFullName = [user?.nombre, user?.apellido_paterno]
     .filter(Boolean)
@@ -59,9 +60,21 @@ export default function EmployerContactStepScreen() {
     values.phone.trim().length === 10 &&
     values.description.trim().length >= 15;
 
-  const onSubmit = (data: ContactStepForm) => {
-    updateDraft(data);
-    router.push("/(employer)/planes");
+  const onSubmit = async (data: ContactStepForm) => {
+    setSaving(true);
+    try {
+      updateDraft(data);
+      await saveProfileToServer();
+      if (hasAccess) {
+        router.replace("/(employer)/panel");
+      } else {
+        router.push("/(employer)/verificacion");
+      }
+    } catch (error) {
+      Alert.alert("No se pudo guardar", extractErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -69,7 +82,7 @@ export default function EmployerContactStepScreen() {
       title="Perfil de reclutador"
       subtitle={`Datos de contacto para representar a ${draft.companyName || "tu empresa"}.`}
       showBackButton
-      stepIndicator={{ current: 2, total: 3 }}
+      stepIndicator={{ current: 2, total: 4 }}
     >
       <View style={styles.form}>
         <FormInput
@@ -124,7 +137,8 @@ export default function EmployerContactStepScreen() {
 
         <View style={styles.ctaWrap}>
           <AppButton
-            title="Finalizar registro"
+            title={hasAccess ? "Guardar cambios" : "Continuar"}
+            loading={saving}
             disabled={!canSubmit}
             onPress={handleSubmit(onSubmit)}
           />

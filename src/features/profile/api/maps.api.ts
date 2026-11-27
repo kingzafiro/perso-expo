@@ -23,11 +23,15 @@ export interface ResolvedMapAddress {
 export async function searchAddressPredictions(
   query: string,
   coords?: { lat: number; lng: number } | null,
+  mode?: "all" | "cities",
 ): Promise<PlacePrediction[]> {
   const params: Record<string, string | number> = { q: query };
   if (coords) {
     params.lat = coords.lat;
     params.lng = coords.lng;
+  }
+  if (mode) {
+    params.mode = mode;
   }
 
   const { data } = await apiClient.get<{

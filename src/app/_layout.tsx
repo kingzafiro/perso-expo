@@ -1,6 +1,7 @@
 import "@/lib/api/interceptors";
 
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
+import { usePushNotifications } from "@/features/notifications/hooks/use-push-notifications";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { restoreSession } from "@/lib/auth/session";
 import { queryClient } from "@/lib/query/client";
@@ -29,6 +30,8 @@ export default function RootLayout() {
     hydrateEmployer();
     restoreSession();
   }, [hydratePreferences, hydrateEmployer]);
+
+  usePushNotifications(isAuthenticated && !needsOnboarding);
 
   if (isLoading) {
     return <AnimatedSplashOverlay />;

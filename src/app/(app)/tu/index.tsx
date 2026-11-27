@@ -3,12 +3,14 @@ import { router } from "expo-router";
 import {
   Bell,
   ChevronRight,
+  FileCheck2,
   FileText,
   LogOut,
   Palette,
   ShieldCheck,
   UserCog,
 } from "lucide-react-native";
+import { useEffect } from "react";
 import {
   Alert,
   Platform,
@@ -19,6 +21,8 @@ import {
   View,
 } from "react-native";
 
+import { EmployerSettingsGroup } from "@/features/employer/components/EmployerSettingsGroup";
+import { useMyDocumentRequests } from "@/features/jobs/hooks/use-jobs";
 import { ProfileAvatar } from "@/features/profile/components/ProfileAvatar";
 import { SettingsGroup, SettingsRow } from "@/features/settings/components/SettingsGroup";
 import { SettingsHeader } from "@/features/settings/components/SettingsHeader";
@@ -26,6 +30,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 import { clearSession } from "@/lib/auth/session";
 import { useAuthStore } from "@/stores/auth.store";
+import { useEmployerStore } from "@/stores/employer.store";
 import { usePreferencesStore } from "@/stores/preferences.store";
 
 function getDisplayName(
@@ -58,6 +63,17 @@ export default function TuScreen() {
   const theme = useTheme();
   const user = useAuthStore((state) => state.user);
   const colorSchemePref = usePreferencesStore((state) => state.colorScheme);
+  const syncEmployerFromServer = useEmployerStore(
+    (state) => state.syncFromServer,
+  );
+  const { data: docRequests = [] } = useMyDocumentRequests();
+  const pendingDocRequestsCount = docRequests.filter(
+    (r) => r.estado === "pendiente",
+  ).length;
+
+  useEffect(() => {
+    void syncEmployerFromServer();
+  }, [syncEmployerFromServer]);
 
   const displayName = getDisplayName(
     user?.nombre,
@@ -164,6 +180,20 @@ export default function TuScreen() {
           />
 
           <SettingsRow
+            title="Solicitudes de documentos"
+            subtitle="Permisos de acceso para empresas"
+            value={
+              pendingDocRequestsCount > 0
+                ? `${pendingDocRequestsCount} pendiente${pendingDocRequestsCount === 1 ? "" : "s"}`
+                : undefined
+            }
+            icon={<FileCheck2 size={18} color="#FFFFFF" />}
+            iconBgColor="#0A84FF"
+            showDivider
+            onPress={() => router.push("/(app)/tu/solicitudes")}
+          />
+
+          <SettingsRow
             title="Configuración de la cuenta"
             icon={<UserCog size={18} color="#FFFFFF" />}
             iconBgColor="#636366"
@@ -197,6 +227,9 @@ export default function TuScreen() {
             onPress={() => router.push("/(app)/tu/apariencia")}
           />
         </SettingsGroup>
+
+        {/* Perso Empresas (acceso discreto) */}
+        <EmployerSettingsGroup />
 
         {/* Cerrar sesión */}
         <SettingsGroup>

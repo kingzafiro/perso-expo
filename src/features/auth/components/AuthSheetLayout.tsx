@@ -86,8 +86,8 @@ export function AuthSheetLayout({
 
     return {
       opacity: progress,
-      maxHeight: interpolate(progress, [0, 1], [0, 140]),
-      marginTop: interpolate(progress, [0, 1], [0, 18]),
+      maxHeight: interpolate(progress, [0, 1], [0, 220]),
+      marginTop: interpolate(progress, [0, 1], [0, 10]),
       transform: [
         {
           translateY: interpolate(progress, [0, 1], [-10, 0]),
@@ -306,7 +306,6 @@ const styles = StyleSheet.create({
 
   layoutContainer: {
     flex: 1,
-    justifyContent: "space-between",
   },
 
   orbPrimary: {
@@ -340,8 +339,9 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 480,
     alignSelf: "center",
+    flexShrink: 0,
     paddingHorizontal: 24,
-    paddingBottom: 16,
+    paddingBottom: 10,
   },
 
   topBar: {
@@ -432,27 +432,26 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontSize: 32,
-    lineHeight: 38,
+    fontSize: 29,
+    lineHeight: 35,
     fontWeight: "800",
-    letterSpacing: -0.9,
+    letterSpacing: -0.8,
   },
 
   subtitle: {
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 15,
+    lineHeight: 21,
   },
 
   sheetOuter: {
     width: "100%",
     maxWidth: 520,
     alignSelf: "center",
-    flexShrink: 1,
-    marginTop: "auto",
+    flex: 1,
   },
 
   sheetCardGlass: {
-    flexShrink: 1,
+    flex: 1,
     borderTopLeftRadius: 34,
     borderTopRightRadius: 34,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -461,7 +460,7 @@ const styles = StyleSheet.create({
   },
 
   sheetCard: {
-    flexShrink: 1,
+    flex: 1,
     borderTopLeftRadius: 34,
     borderTopRightRadius: 34,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -471,15 +470,15 @@ const styles = StyleSheet.create({
   },
 
   cardFlex: {
-    flexShrink: 1,
+    flex: 1,
     borderTopLeftRadius: 34,
     borderTopRightRadius: 34,
     overflow: "hidden",
   },
 
   grabberWrapper: {
-    paddingTop: 12,
-    paddingBottom: 14,
+    paddingTop: 10,
+    paddingBottom: 10,
     alignItems: "center",
   },
 
@@ -490,8 +489,7 @@ const styles = StyleSheet.create({
   },
 
   cardScroll: {
-    flexGrow: 0,
-    flexShrink: 1,
+    flex: 1,
   },
 
   cardScrollContent: {

@@ -1,7 +1,9 @@
 import type { AuthUser } from "@/features/auth/types/auth.types";
+import { unregisterCurrentDevicePushToken } from "@/features/notifications/lib/notifications-client";
 import { apiClient } from "@/lib/api/client";
 import { secureStorage } from "@/lib/storage/secure-storage";
 import { useAuthStore } from "@/stores/auth.store";
+import { useEmployerStore } from "@/stores/employer.store";
 
 interface RefreshTokenResponse {
   ok: boolean;
@@ -64,7 +66,11 @@ export async function saveSessionTokens(
 }
 
 export async function clearSession() {
-  await secureStorage.clearTokens();
+  await unregisterCurrentDevicePushToken();
+  await Promise.all([
+    secureStorage.clearTokens(),
+    useEmployerStore.getState().clearEmployerProfile(),
+  ]);
   const store = useAuthStore.getState();
   store.setUser(null);
   store.setNeedsOnboarding(false);

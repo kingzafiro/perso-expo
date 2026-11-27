@@ -1,5 +1,4 @@
 import * as Haptics from "expo-haptics";
-import * as Notifications from "expo-notifications";
 import { Bell, Briefcase, ShieldCheck, Sparkles } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import {
@@ -22,6 +21,7 @@ import Animated, {
 
 import { AppButton } from "@/components/ui/AppButton";
 import { AuthSheetLayout } from "@/features/auth/components/AuthSheetLayout";
+import { registerDeviceForPushNotifications } from "@/features/notifications/lib/notifications-client";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 import { completeOnboarding } from "@/lib/auth/session";
@@ -48,8 +48,8 @@ const BENEFITS = [
 export default function OnboardingNotificacionesScreen() {
   const isDark = useColorScheme() === "dark";
   const theme = useTheme();
-  const setNotificationPreference = usePreferencesStore(
-    (state) => state.setNotificationPreference,
+  const setNotificationsBulk = usePreferencesStore(
+    (state) => state.setNotificationsBulk,
   );
   const [requesting, setRequesting] = useState(false);
 
@@ -98,44 +98,50 @@ export default function OnboardingNotificacionesScreen() {
         return;
       }
 
-      const existing = await Notifications.getPermissionsAsync();
-      let finalStatus = existing.status;
+      const result = await registerDeviceForPushNotifications({
+        promptIfNeeded: true,
+      });
 
-      if (finalStatus !== "granted") {
-        if (!existing.canAskAgain) {
-          Alert.alert(
-            "Notificaciones desactivadas",
-            "Activa las notificaciones para Perso desde la configuración de tu dispositivo.",
-            [
-              {
-                text: "Continuar sin activar",
-                style: "cancel",
-                onPress: () => {
-                  completeOnboarding();
-                },
-              },
-              {
-                text: "Abrir configuración",
-                onPress: async () => {
-                  await Linking.openSettings();
-                  await completeOnboarding();
-                },
-              },
-            ],
-          );
-          return;
-        }
-
-        const requested = await Notifications.requestPermissionsAsync();
-        finalStatus = requested.status;
+      if (result.environment === "expo-go") {
+        await setNotificationsBulk({
+          empleos: true,
+          postulaciones: true,
+          seguridad: true,
+        });
+        await completeOnboarding();
+        return;
       }
 
-      const granted = finalStatus === "granted";
-      await Promise.all([
-        setNotificationPreference("empleos", granted),
-        setNotificationPreference("postulaciones", granted),
-        setNotificationPreference("seguridad", granted),
-      ]);
+      if (result.status !== "granted" && !result.canAskAgain) {
+        Alert.alert(
+          "Notificaciones desactivadas",
+          "Activa las notificaciones para Perso desde la configuración de tu dispositivo.",
+          [
+            {
+              text: "Continuar sin activar",
+              style: "cancel",
+              onPress: () => {
+                void completeOnboarding();
+              },
+            },
+            {
+              text: "Abrir configuración",
+              onPress: async () => {
+                await Linking.openSettings();
+                await completeOnboarding();
+              },
+            },
+          ],
+        );
+        return;
+      }
+
+      const granted = result.status === "granted";
+      await setNotificationsBulk({
+        empleos: granted,
+        postulaciones: granted,
+        seguridad: granted,
+      });
 
       if (granted) {
         await Haptics.notificationAsync(

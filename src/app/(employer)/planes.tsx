@@ -1,24 +1,18 @@
+import axios from "axios";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import {
-  Building2,
-  Check,
-  Crown,
-  ShieldCheck,
-  Sparkles,
-} from "lucide-react-native";
+import { Building2, ShieldCheck } from "lucide-react-native";
 import { useState } from "react";
-import {
-  Alert,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Alert, Platform, StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
 import { AuthSheetLayout } from "@/features/auth/components/AuthSheetLayout";
+import { useBilling } from "@/features/billing/hooks/use-billing";
+import { getStoreProductId } from "@/features/billing/lib/revenuecat-client";
+import { BillingCycleToggle } from "@/features/employer/components/BillingCycleToggle";
+import { PlanCard } from "@/features/employer/components/PlanCard";
+import { SubscriptionComplianceFooter } from "@/features/employer/components/SubscriptionComplianceFooter";
+import { TrialHighlightBanner } from "@/features/employer/components/TrialHighlightBanner";
 import {
   EMPLOYER_PLANS,
   type BillingCycle,
@@ -27,21 +21,44 @@ import {
 import { useTheme } from "@/hooks/use-theme";
 import { useEmployerStore } from "@/stores/employer.store";
 
+function extractErrorMessage(error: unknown, fallback: string) {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data as { mensaje?: string } | undefined;
+    if (data?.mensaje) return data.mensaje;
+  }
+  return fallback;
+}
+
 export default function EmployerPlansScreen() {
   const theme = useTheme();
   const draft = useEmployerStore((state) => state.draft);
   const existingProfile = useEmployerStore((state) => state.profile);
-  const finalizeRegistration = useEmployerStore(
-    (state) => state.finalizeRegistration,
+  const subscription = useEmployerStore((state) => state.subscription);
+  const sandboxEnabled = useEmployerStore((state) => state.sandboxEnabled);
+  const saveProfileToServer = useEmployerStore(
+    (state) => state.saveProfileToServer,
+  );
+  const syncSubscriptionWithServer = useEmployerStore(
+    (state) => state.syncSubscriptionWithServer,
+  );
+  const activateSandboxTrial = useEmployerStore(
+    (state) => state.activateSandboxTrial,
   );
 
+  const {
+    packagesByProductId,
+    purchasePlan,
+    restorePurchases,
+  } = useBilling();
+
   const [billingCycle, setBillingCycle] = useState<BillingCycle>(
-    existingProfile?.billingCycle ?? "annual",
+    subscription?.billingCycle ?? "monthly",
   );
   const [selectedPlanId, setSelectedPlanId] = useState<EmployerPlanId>(
-    existingProfile?.selectedPlanId ?? "profesional",
+    subscription?.planId ?? "profesional",
   );
-  const [saving, setSaving] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [restoring, setRestoring] = useState(false);
 
   const selectedPlan =
     EMPLOYER_PLANS.find((p) => p.id === selectedPlanId) ?? EMPLOYER_PLANS[1];
@@ -51,7 +68,7 @@ export default function EmployerPlansScreen() {
       : selectedPlan.monthlyPrice;
 
   const companyName =
-    draft.companyName || existingProfile?.companyName || "tu empresa";
+    existingProfile?.companyName || draft.companyName || "tu empresa";
 
   const exitToHome = () => {
     if (router.canDismiss()) {
@@ -61,77 +78,166 @@ export default function EmployerPlansScreen() {
     }
   };
 
-  const handleActivate = async () => {
-    setSaving(true);
+  const ensureCompanyProfileSaved = async () => {
+    if (existingProfile?.id_empresa) return;
+    await saveProfileToServer({
+      selectedPlanId: selectedPlan.id,
+      billingCycle,
+    });
+  };
+
+  const runSandboxTrial = async () => {
+    setProcessing(true);
     try {
-      await finalizeRegistration(selectedPlan.id, billingCycle);
+      await ensureCompanyProfileSaved();
+      await activateSandboxTrial(selectedPlan.id, billingCycle);
       if (Platform.OS !== "web") {
         void Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success,
         );
       }
+      router.replace("/(employer)/panel");
+    } catch (error) {
+      Alert.alert(
+        "No se pudo activar la prueba",
+        extractErrorMessage(
+          error,
+          "Verifica que la migración de base de datos esté aplicada.",
+        ),
+      );
+    } finally {
+      setProcessing(false);
+    }
+  };
 
-      if (Platform.OS === "web") {
-        exitToHome();
+  const handleStartTrial = async () => {
+    if (processing) return;
+    setProcessing(true);
+
+    try {
+      await ensureCompanyProfileSaved();
+      const outcome = await purchasePlan(selectedPlan.id, billingCycle);
+
+      if (outcome.cancelled) {
+        return;
+      }
+
+      if (outcome.ok) {
+        await syncSubscriptionWithServer({
+          planId: selectedPlan.id,
+          billingCycle,
+          productId: outcome.productId,
+          isTrial: outcome.isTrial,
+          expirationDate: outcome.expirationDate,
+          platform: Platform.OS === "ios" ? "ios" : "android",
+        });
+
+        if (Platform.OS !== "web") {
+          void Haptics.notificationAsync(
+            Haptics.NotificationFeedbackType.Success,
+          );
+        }
+
+        router.replace("/(employer)/panel");
+        return;
+      }
+
+      if (outcome.mode === "sandbox-required" && sandboxEnabled) {
+        if (Platform.OS === "web") {
+          await runSandboxTrial();
+          return;
+        }
+
+        Alert.alert(
+          "Modo prueba local (Expo Go)",
+          `Las compras reales de App Store y Google Play se procesarán con RevenueCat al compilar tu Development Build.\n\n¿Deseas activar ahora la prueba gratis de 14 días en modo desarrollo para explorar el Panel de Empleador?`,
+          [
+            { text: "Cancelar", style: "cancel" },
+            {
+              text: "Activar 14 días (prueba)",
+              onPress: () => {
+                void runSandboxTrial();
+              },
+            },
+          ],
+        );
         return;
       }
 
       Alert.alert(
-        "Perfil de empleador registrado",
-        `Guardamos el perfil de ${companyName} con el Plan ${selectedPlan.name} ($${displayPrice.toLocaleString("es-MX")} MXN/mes).\n\nMuy pronto habilitaremos la pasarela de pago segura para activar tus publicaciones de inmediato.`,
-        [
-          {
-            text: "Volver a Inicio",
-            onPress: exitToHome,
-          },
-        ],
+        "Suscripción no completada",
+        outcome.message ||
+          "No fue posible iniciar tu suscripción en este momento.",
+      );
+    } catch (error) {
+      Alert.alert(
+        "Error al activar plan",
+        extractErrorMessage(
+          error,
+          "No pudimos completar la activación. Intenta de nuevo.",
+        ),
       );
     } finally {
-      setSaving(false);
+      setProcessing(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (restoring) return;
+    setRestoring(true);
+
+    try {
+      const outcome = await restorePurchases();
+
+      if (outcome.hasActiveEntitlement) {
+        await syncSubscriptionWithServer({
+          productId: outcome.productId,
+          isTrial: outcome.isTrial,
+          expirationDate: outcome.expirationDate,
+          platform: Platform.OS === "ios" ? "ios" : "android",
+        });
+        Alert.alert("Compras restauradas", outcome.message, [
+          {
+            text: "Ir al panel",
+            onPress: () => router.replace("/(employer)/panel"),
+          },
+        ]);
+        return;
+      }
+
+      Alert.alert("Restaurar compras", outcome.message);
+    } catch (error) {
+      Alert.alert(
+        "Error al restaurar",
+        extractErrorMessage(error, "No fue posible restaurar tus compras."),
+      );
+    } finally {
+      setRestoring(false);
     }
   };
 
   const handleSaveForLater = async () => {
-    setSaving(true);
+    setProcessing(true);
     try {
-      await finalizeRegistration(null, billingCycle);
+      await ensureCompanyProfileSaved();
+      exitToHome();
+    } catch {
       exitToHome();
     } finally {
-      setSaving(false);
+      setProcessing(false);
     }
   };
 
   return (
     <AuthSheetLayout
-      title="Activa tu cuenta de empleador"
-      subtitle={`¡Listo! El perfil de ${companyName} ya fue creado.`}
+      title="Activa Perso Empresas"
+      subtitle={`Comienza con 14 días gratis para ${companyName}.`}
       showBackButton
-      stepIndicator={{ current: 3, total: 3 }}
+      stepIndicator={{ current: 4, total: 4 }}
     >
       <View style={styles.container}>
-        {/* Aviso transparente del costo de membresía */}
-        <View
-          style={[
-            styles.noticeCard,
-            {
-              backgroundColor: theme.primarySoft,
-              borderColor: theme.primaryBorder,
-            },
-          ]}
-        >
-          <View style={styles.noticeHeader}>
-            <Crown size={16} color={theme.primary} />
-            <Text style={[styles.noticeTitle, { color: theme.primary }]}>
-              Membresía Perso Empresas
-            </Text>
-          </View>
-          <Text style={[styles.noticeBody, { color: theme.text }]}>
-            Para mantener vacantes reales, cero spam y candidatos con documentos
-            verificados, el acceso como empleador tiene un costo mensual o anual.
-          </Text>
-        </View>
+        <TrialHighlightBanner trialDays={selectedPlan.trialDays} />
 
-        {/* Resumen compacto de la empresa registrada */}
         <View
           style={[
             styles.companySummary,
@@ -161,8 +267,8 @@ export default function EmployerPlansScreen() {
               numberOfLines={1}
             >
               {[
-                draft.industry || existingProfile?.industry,
-                draft.city || existingProfile?.city,
+                existingProfile?.industry || draft.industry,
+                existingProfile?.city || draft.city,
               ]
                 .filter(Boolean)
                 .join(" · ") || "Perfil de empleador listo"}
@@ -171,183 +277,42 @@ export default function EmployerPlansScreen() {
           <ShieldCheck size={18} color={theme.success} />
         </View>
 
-        {/* Selector Mensual / Anual */}
-        <View
-          style={[
-            styles.cycleTrack,
-            {
-              backgroundColor: theme.inputBackground,
-              borderColor: theme.inputBorder,
-            },
-          ]}
-        >
-          <Pressable
-            onPress={() => {
-              if (Platform.OS !== "web") void Haptics.selectionAsync();
-              setBillingCycle("monthly");
-            }}
-            style={[
-              styles.cycleOption,
-              billingCycle === "monthly" && {
-                backgroundColor: theme.background,
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.cycleText,
-                {
-                  color:
-                    billingCycle === "monthly"
-                      ? theme.text
-                      : theme.textSecondary,
-                },
-              ]}
-            >
-              Mensual
-            </Text>
-          </Pressable>
+        <BillingCycleToggle value={billingCycle} onChange={setBillingCycle} />
 
-          <Pressable
-            onPress={() => {
-              if (Platform.OS !== "web") void Haptics.selectionAsync();
-              setBillingCycle("annual");
-            }}
-            style={[
-              styles.cycleOption,
-              billingCycle === "annual" && {
-                backgroundColor: theme.background,
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.cycleText,
-                {
-                  color:
-                    billingCycle === "annual"
-                      ? theme.text
-                      : theme.textSecondary,
-                },
-              ]}
-            >
-              Anual
-            </Text>
-            <View
-              style={[styles.savePill, { backgroundColor: theme.primarySoft }]}
-            >
-              <Text style={[styles.savePillText, { color: theme.primary }]}>
-                -20%
-              </Text>
-            </View>
-          </Pressable>
-        </View>
-
-        {/* Tarjetas de planes */}
         <View style={styles.plansList}>
           {EMPLOYER_PLANS.map((plan) => {
-            const active = selectedPlanId === plan.id;
-            const price =
-              billingCycle === "annual"
-                ? plan.annualMonthlyPrice
-                : plan.monthlyPrice;
-
+            const productId = getStoreProductId(plan.id, billingCycle);
             return (
-              <Pressable
+              <PlanCard
                 key={plan.id}
-                onPress={() => {
-                  if (Platform.OS !== "web") void Haptics.selectionAsync();
-                  setSelectedPlanId(plan.id);
-                }}
-                style={[
-                  styles.planCard,
-                  {
-                    backgroundColor: active
-                      ? theme.primarySoft
-                      : theme.inputBackground,
-                    borderColor: active ? theme.primary : theme.inputBorder,
-                  },
-                ]}
-              >
-                <View style={styles.planTop}>
-                  <View style={styles.flexOne}>
-                    <View style={styles.planNameRow}>
-                      <Text style={[styles.planName, { color: theme.text }]}>
-                        {plan.name}
-                      </Text>
-                      {plan.popular && (
-                        <View
-                          style={[
-                            styles.popularBadge,
-                            { backgroundColor: theme.primary },
-                          ]}
-                        >
-                          <Sparkles size={11} color="#FFFFFF" />
-                          <Text style={styles.popularText}>Más elegido</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text
-                      style={[
-                        styles.planTagline,
-                        { color: theme.textSecondary },
-                      ]}
-                    >
-                      {plan.tagline}
-                    </Text>
-                  </View>
-
-                  <View style={styles.priceCol}>
-                    <Text style={[styles.priceValue, { color: theme.text }]}>
-                      ${price.toLocaleString("es-MX")}
-                    </Text>
-                    <Text
-                      style={[styles.priceUnit, { color: theme.textSecondary }]}
-                    >
-                      MXN/mes
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.featuresList}>
-                  {plan.features.map((feat) => (
-                    <View key={feat} style={styles.featureRow}>
-                      <Check size={14} color={theme.primary} />
-                      <Text
-                        style={[
-                          styles.featureText,
-                          { color: theme.textSecondary },
-                        ]}
-                      >
-                        {feat}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </Pressable>
+                plan={plan}
+                billingCycle={billingCycle}
+                selected={selectedPlanId === plan.id}
+                storePackage={packagesByProductId[productId]}
+                onSelect={() => setSelectedPlanId(plan.id)}
+              />
             );
           })}
         </View>
 
         <View style={styles.actions}>
           <AppButton
-            title={`Activar ${selectedPlan.name} · $${displayPrice.toLocaleString("es-MX")} MXN/mes`}
-            loading={saving}
-            onPress={handleActivate}
+            title={`Iniciar 14 días gratis · ${selectedPlan.name}`}
+            loading={processing}
+            onPress={handleStartTrial}
           />
+          <Text style={[styles.afterTrialText, { color: theme.textSecondary }]}>
+            Después de 14 días: ${displayPrice.toLocaleString("es-MX")} MXN/mes
+            {billingCycle === "annual" ? " (facturado anualmente)" : ""}
+          </Text>
 
-          <Pressable
-            onPress={handleSaveForLater}
-            disabled={saving}
-            style={({ pressed }) => [
-              styles.laterBtn,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text style={[styles.laterText, { color: theme.textSecondary }]}>
-              Guardar mi perfil y activar después
-            </Text>
-          </Pressable>
+          <SubscriptionComplianceFooter
+            restoring={restoring}
+            disabled={processing}
+            trialDays={selectedPlan.trialDays}
+            onRestore={handleRestore}
+            onSaveForLater={handleSaveForLater}
+          />
         </View>
       </View>
     </AuthSheetLayout>
@@ -357,30 +322,7 @@ export default function EmployerPlansScreen() {
 const styles = StyleSheet.create({
   container: {
     width: "100%",
-    gap: 15,
-  },
-
-  noticeCard: {
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 14,
-    gap: 6,
-  },
-
-  noticeHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-
-  noticeTitle: {
-    fontSize: 13.5,
-    fontWeight: "800",
-  },
-
-  noticeBody: {
-    fontSize: 13,
-    lineHeight: 19,
+    gap: 14,
   },
 
   companySummary: {
@@ -414,139 +356,18 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
   },
 
-  cycleTrack: {
-    flexDirection: "row",
-    padding: 4,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: 4,
-  },
-
-  cycleOption: {
-    flex: 1,
-    height: 40,
-    borderRadius: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-
-  cycleText: {
-    fontSize: 13.5,
-    fontWeight: "700",
-  },
-
-  savePill: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 999,
-  },
-
-  savePillText: {
-    fontSize: 11,
-    fontWeight: "800",
-  },
-
   plansList: {
     gap: 11,
   },
 
-  planCard: {
-    borderRadius: 20,
-    borderWidth: 1.5,
-    padding: 15,
-    gap: 12,
-  },
-
-  planTop: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-
-  planNameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    flexWrap: "wrap",
-  },
-
-  planName: {
-    fontSize: 17,
-    fontWeight: "800",
-    letterSpacing: -0.3,
-  },
-
-  popularBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-
-  popularText: {
-    color: "#FFFFFF",
-    fontSize: 10.5,
-    fontWeight: "800",
-  },
-
-  planTagline: {
-    fontSize: 12.5,
-    lineHeight: 17,
-    marginTop: 2,
-  },
-
-  priceCol: {
-    alignItems: "flex-end",
-  },
-
-  priceValue: {
-    fontSize: 20,
-    fontWeight: "800",
-    letterSpacing: -0.5,
-  },
-
-  priceUnit: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-
-  featuresList: {
-    gap: 7,
-  },
-
-  featureRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  featureText: {
-    fontSize: 12.5,
-    flex: 1,
-    lineHeight: 17,
-  },
-
   actions: {
-    gap: 10,
+    gap: 8,
     marginTop: 4,
   },
 
-  laterBtn: {
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-
-  laterText: {
-    fontSize: 13.5,
+  afterTrialText: {
+    fontSize: 12.5,
     fontWeight: "600",
-  },
-
-  pressed: {
-    opacity: 0.72,
+    textAlign: "center",
   },
 });

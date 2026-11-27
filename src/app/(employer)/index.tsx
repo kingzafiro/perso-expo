@@ -3,29 +3,21 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { useForm } from "react-hook-form";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { z } from "zod";
 
 import { AppButton } from "@/components/ui/AppButton";
 import { FormInput } from "@/components/ui/FormInput";
 import { AuthSheetLayout } from "@/features/auth/components/AuthSheetLayout";
+import { CityAutocompleteField } from "@/features/employer/components/CityAutocompleteField";
+import {
+  companyStepSchema,
+  type CompanyStepForm,
+} from "@/features/employer/schemas/employer.schemas";
 import {
   EMPLOYER_INDUSTRIES,
   EMPLOYER_SIZES,
 } from "@/features/employer/types/employer.types";
 import { useTheme } from "@/hooks/use-theme";
 import { useEmployerStore } from "@/stores/employer.store";
-
-const companyStepSchema = z.object({
-  companyName: z
-    .string()
-    .trim()
-    .min(2, "Ingresa el nombre comercial de tu empresa"),
-  industry: z.string().trim().min(1, "Selecciona el sector de tu empresa"),
-  companySize: z.string().trim().min(1, "Selecciona el tamaño del equipo"),
-  city: z.string().trim().min(2, "Indica la ciudad y estado principal"),
-});
-
-type CompanyStepForm = z.infer<typeof companyStepSchema>;
 
 export default function EmployerCompanyStepScreen() {
   const theme = useTheme();
@@ -56,7 +48,12 @@ export default function EmployerCompanyStepScreen() {
     values.city.trim().length >= 2;
 
   const onSubmit = (data: CompanyStepForm) => {
-    updateDraft(data);
+    updateDraft({
+      companyName: data.companyName,
+      industry: data.industry,
+      companySize: data.companySize,
+      city: data.city,
+    });
     router.push("/(employer)/contacto");
   };
 
@@ -65,7 +62,7 @@ export default function EmployerCompanyStepScreen() {
       title="Crea tu perfil de empleador"
       subtitle="Presenta tu empresa de forma profesional ante los candidatos de Perso."
       showBackButton
-      stepIndicator={{ current: 1, total: 3 }}
+      stepIndicator={{ current: 1, total: 4 }}
     >
       <View style={styles.form}>
         <FormInput
@@ -114,11 +111,11 @@ export default function EmployerCompanyStepScreen() {
               );
             })}
           </View>
-          {errors.industry?.message && (
+          {errors.industry?.message ? (
             <Text style={[styles.errorText, { color: theme.error }]}>
               {errors.industry.message}
             </Text>
-          )}
+          ) : null}
         </View>
 
         <View style={styles.sectionBlock}>
@@ -160,19 +157,20 @@ export default function EmployerCompanyStepScreen() {
               );
             })}
           </View>
-          {errors.companySize?.message && (
+          {errors.companySize?.message ? (
             <Text style={[styles.errorText, { color: theme.error }]}>
               {errors.companySize.message}
             </Text>
-          )}
+          ) : null}
         </View>
 
-        <FormInput
-          control={control}
-          name="city"
+        <CityAutocompleteField
           label="Ciudad y estado principal"
-          placeholder="Ej. Monterrey, Nuevo León"
-          autoCapitalize="words"
+          value={values.city}
+          error={errors.city?.message}
+          onSelectCity={(cityLabel) =>
+            setValue("city", cityLabel, { shouldValidate: true })
+          }
         />
 
         <View style={styles.ctaWrap}>
