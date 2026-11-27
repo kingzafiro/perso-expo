@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 
+import { Spinner } from "@/components/ui/Spinner";
 import { DocumentRequestCard } from "@/features/jobs/components/DocumentRequestCard";
 import {
   useMyDocumentRequests,
@@ -92,7 +93,7 @@ export default function SolicitudesDocumentosScreen() {
       >
         {isLoading ? (
           <View style={styles.loaderBox}>
-            <ActivityIndicator color={theme.primary} />
+            <Spinner size={26} strokeWidth={2.6} color={theme.primary} />
           </View>
         ) : requests.length === 0 ? (
           <View

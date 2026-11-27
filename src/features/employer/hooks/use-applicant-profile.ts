@@ -9,10 +9,23 @@ export function applicantProfileQueryKey(idPostulacion: number | null) {
   return ["employer", "applicant-profile", idPostulacion] as const;
 }
 
-export function useApplicantFullProfile(idPostulacion: number | null) {
+export function useApplicantFullProfile(
+  idPostulacion: number | null,
+  idVacante: number | null = null,
+) {
+  const queryClient = useQueryClient();
+
   return useQuery({
     queryKey: applicantProfileQueryKey(idPostulacion),
-    queryFn: () => getApplicantFullProfileApi(idPostulacion!),
+    queryFn: async () => {
+      const result = await getApplicantFullProfileApi(idPostulacion!);
+      if (result.postulacion.auto_en_revision && idVacante) {
+        void queryClient.invalidateQueries({
+          queryKey: ["employer", "vacancies", idVacante, "applicants"],
+        });
+      }
+      return result;
+    },
     enabled: Boolean(idPostulacion),
   });
 }

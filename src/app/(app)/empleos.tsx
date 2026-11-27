@@ -20,7 +20,10 @@ import type {
 } from "@/features/employer/types/employer.types";
 import { JobDetailModal } from "@/features/jobs/components/JobDetailModal";
 import { JobFeedCard } from "@/features/jobs/components/JobFeedCard";
-import { usePublicVacancies } from "@/features/jobs/hooks/use-jobs";
+import {
+  usePublicVacancies,
+  useToggleFavoriteVacancy,
+} from "@/features/jobs/hooks/use-jobs";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -40,13 +43,27 @@ export default function EmpleosScreen() {
   const [modalidad, setModalidad] = useState<VacancyModality | "all">("all");
   const [selectedVacancy, setSelectedVacancy] =
     useState<EmployerVacancy | null>(null);
+  const [manualRefreshing, setManualRefreshing] = useState(false);
 
   const {
     data: vacancies = [],
     isLoading,
-    isRefetching,
     refetch,
   } = usePublicVacancies({ q: searchText, modalidad });
+  const { toggleFavorite } = useToggleFavoriteVacancy();
+
+  const handleManualRefresh = async () => {
+    setManualRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setManualRefreshing(false);
+    }
+  };
+
+  const handleToggleFavorite = (vacancy: EmployerVacancy) => {
+    toggleFavorite(vacancy);
+  };
 
   const screenBg = isDark ? "#000000" : "#F5F2EF";
   const cardBg = isDark ? "#181513" : "#FFFFFF";
@@ -66,8 +83,8 @@ export default function EmpleosScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={() => void refetch()}
+            refreshing={manualRefreshing}
+            onRefresh={() => void handleManualRefresh()}
             tintColor={theme.primary}
           />
         }
@@ -170,6 +187,7 @@ export default function EmpleosScreen() {
               <JobFeedCard
                 key={vacancy.id_vacante}
                 vacancy={vacancy}
+                onToggleFavorite={() => handleToggleFavorite(vacancy)}
                 onPress={() => {
                   if (Platform.OS !== "web") void Haptics.selectionAsync();
                   setSelectedVacancy(vacancy);
@@ -187,6 +205,13 @@ export default function EmpleosScreen() {
           setSelectedVacancy((prev) =>
             prev && prev.id_vacante === id
               ? { ...prev, ya_postulado: true, estado_postulacion: "enviada" }
+              : prev,
+          )
+        }
+        onFavoriteChanged={(id, isFavorite) =>
+          setSelectedVacancy((prev) =>
+            prev && prev.id_vacante === id
+              ? { ...prev, es_favorito: isFavorite }
               : prev,
           )
         }

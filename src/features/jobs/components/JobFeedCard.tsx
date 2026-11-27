@@ -18,12 +18,19 @@ import {
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 
+import { FavoriteButton } from "./FavoriteButton";
+
 interface JobFeedCardProps {
   vacancy: EmployerVacancy;
   onPress: () => void;
+  onToggleFavorite?: () => void;
 }
 
-export function JobFeedCard({ vacancy, onPress }: JobFeedCardProps) {
+export function JobFeedCard({
+  vacancy,
+  onPress,
+  onToggleFavorite,
+}: JobFeedCardProps) {
   const isDark = useColorScheme() === "dark";
   const theme = useTheme();
 
@@ -35,9 +42,8 @@ export function JobFeedCard({ vacancy, onPress }: JobFeedCardProps) {
     vacancy.tipo_contrato;
 
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
+    <View
+      style={[
         styles.card,
         {
           backgroundColor: isDark ? "#181513" : "#FFFFFF",
@@ -45,88 +51,114 @@ export function JobFeedCard({ vacancy, onPress }: JobFeedCardProps) {
             ? "rgba(255, 255, 255, 0.08)"
             : "rgba(23, 18, 14, 0.08)",
         },
-        pressed && styles.pressed,
       ]}
     >
-      <View style={styles.topRow}>
-        <Text
-          style={[styles.title, { color: theme.text }]}
-          numberOfLines={2}
-        >
-          {vacancy.titulo}
-        </Text>
-
-        {vacancy.ya_postulado ? (
-          <View style={styles.appliedPill}>
-            <CheckCircle2 size={12} color="#34C759" />
-            <Text style={styles.appliedPillText}>Postulado</Text>
-          </View>
-        ) : null}
-      </View>
-
-      <View style={styles.companyRow}>
-        <Building2 size={13} color={theme.primary} />
-        <Text
-          style={[styles.companyText, { color: theme.text }]}
-          numberOfLines={1}
-        >
-          {vacancy.empresa?.nombre_comercial || "Empresa en Perso"}
-        </Text>
-        {vacancy.empresa?.verificada ? (
-          <BadgeCheck size={14} color="#34C759" />
-        ) : null}
-      </View>
-
-      <View style={styles.locationRow}>
-        <MapPin size={13} color={theme.textSecondary} />
-        <Text
-          style={[styles.locationText, { color: theme.textSecondary }]}
-          numberOfLines={1}
-        >
-          {formatVacancyLocation(vacancy)} · {modalityLabel}
-        </Text>
-      </View>
-
-      <View style={[styles.salaryRow, { backgroundColor: theme.primarySoft }]}>
-        <Wallet size={13} color={theme.primary} />
-        <Text style={[styles.salaryText, { color: theme.primary }]}>
-          {formatVacancySalary(
-            vacancy.salario_min,
-            vacancy.salario_max,
-            vacancy.salario_periodo,
-          )}
-        </Text>
-      </View>
-
-      <View style={styles.chipsRow}>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [styles.cardBody, pressed && styles.pressed]}
+      >
         <View
-          style={[styles.chip, { backgroundColor: theme.inputBackground }]}
+          style={[
+            styles.topRow,
+            onToggleFavorite ? styles.topRowWithFavorite : null,
+          ]}
         >
-          <Briefcase size={11} color={theme.textSecondary} />
-          <Text style={[styles.chipText, { color: theme.textSecondary }]}>
-            {contractLabel}
+          <Text
+            style={[styles.title, { color: theme.text }]}
+            numberOfLines={2}
+          >
+            {vacancy.titulo}
+          </Text>
+
+          {vacancy.ya_postulado ? (
+            <View style={styles.appliedPill}>
+              <CheckCircle2 size={12} color="#34C759" />
+              <Text style={styles.appliedPillText}>Postulado</Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.companyRow}>
+          <Building2 size={13} color={theme.primary} />
+          <Text
+            style={[styles.companyText, { color: theme.text }]}
+            numberOfLines={1}
+          >
+            {vacancy.empresa?.nombre_comercial || "Empresa en Perso"}
+          </Text>
+          {vacancy.empresa?.verificada ? (
+            <BadgeCheck size={14} color="#34C759" />
+          ) : null}
+        </View>
+
+        <View style={styles.locationRow}>
+          <MapPin size={13} color={theme.textSecondary} />
+          <Text
+            style={[styles.locationText, { color: theme.textSecondary }]}
+            numberOfLines={1}
+          >
+            {formatVacancyLocation(vacancy)} · {modalityLabel}
           </Text>
         </View>
 
-        {vacancy.beneficios.slice(0, 2).map((b) => (
+        <View
+          style={[styles.salaryRow, { backgroundColor: theme.primarySoft }]}
+        >
+          <Wallet size={13} color={theme.primary} />
+          <Text style={[styles.salaryText, { color: theme.primary }]}>
+            {formatVacancySalary(
+              vacancy.salario_min,
+              vacancy.salario_max,
+              vacancy.salario_periodo,
+            )}
+          </Text>
+        </View>
+
+        <View style={styles.chipsRow}>
           <View
-            key={b}
             style={[styles.chip, { backgroundColor: theme.inputBackground }]}
           >
+            <Briefcase size={11} color={theme.textSecondary} />
             <Text style={[styles.chipText, { color: theme.textSecondary }]}>
-              {b}
+              {contractLabel}
             </Text>
           </View>
-        ))}
-      </View>
-    </Pressable>
+
+          {vacancy.beneficios.slice(0, 2).map((b) => (
+            <View
+              key={b}
+              style={[styles.chip, { backgroundColor: theme.inputBackground }]}
+            >
+              <Text style={[styles.chipText, { color: theme.textSecondary }]}>
+                {b}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </Pressable>
+
+      {onToggleFavorite ? (
+        <View style={styles.favOverlay}>
+          <FavoriteButton
+            isFavorite={Boolean(vacancy.es_favorito)}
+            onPress={onToggleFavorite}
+            variant="card"
+          />
+        </View>
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
+    position: "relative",
     borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
+  },
+
+  cardBody: {
     padding: 16,
     gap: 9,
   },
@@ -138,11 +170,22 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 
+  topRowWithFavorite: {
+    paddingRight: 44,
+  },
+
   title: {
     flex: 1,
     fontSize: 17,
     fontWeight: "800",
     letterSpacing: -0.3,
+  },
+
+  favOverlay: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    zIndex: 2,
   },
 
   appliedPill: {
@@ -221,7 +264,6 @@ const styles = StyleSheet.create({
   },
 
   pressed: {
-    opacity: 0.82,
-    transform: [{ scale: 0.99 }],
+    transform: [{ scale: 0.988 }],
   },
 });

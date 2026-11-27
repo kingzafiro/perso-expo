@@ -2,7 +2,6 @@ import * as Haptics from "expo-haptics";
 import { Check, Lock, UploadCloud, X } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import {
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -76,20 +75,16 @@ export function RequestDocumentsModal({
 
   const cardBg = isDark ? "#181513" : "#FFFFFF";
 
+  if (!visible) return null;
+
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <View style={styles.backdrop}>
-        <View
-          style={[
-            styles.dialog,
-            { backgroundColor: cardBg, borderColor: theme.inputBorder },
-          ]}
-        >
+    <View style={styles.backdrop}>
+      <View
+        style={[
+          styles.dialog,
+          { backgroundColor: cardBg, borderColor: theme.inputBorder },
+        ]}
+      >
           <View
             style={[
               styles.header,
@@ -222,15 +217,19 @@ export function RequestDocumentsModal({
               }
             />
           </View>
-        </View>
       </View>
-    </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   backdrop: {
-    flex: 1,
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 50,
     backgroundColor: "rgba(0, 0, 0, 0.56)",
     justifyContent: "center",
     paddingHorizontal: 18,

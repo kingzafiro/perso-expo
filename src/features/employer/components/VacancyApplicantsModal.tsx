@@ -1,5 +1,5 @@
 import { ChevronRight, Mail, Phone, Users, X } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -11,15 +11,16 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { Spinner } from "@/components/ui/Spinner";
 import { ProfileAvatar } from "@/features/profile/components/ProfileAvatar";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 
-import {
-  useUpdateApplicantStatus,
-  useVacancyApplicants,
-} from "../hooks/use-employer-vacancies";
-import type { ApplicationStatus, EmployerVacancy } from "../types/employer.types";
+import { useVacancyApplicants } from "../hooks/use-employer-vacancies";
+import type {
+  ApplicationStatus,
+  EmployerVacancy,
+} from "../types/employer.types";
 import { ApplicantProfileModal } from "./ApplicantProfileModal";
 
 interface VacancyApplicantsModalProps {
@@ -27,12 +28,36 @@ interface VacancyApplicantsModalProps {
   onClose: () => void;
 }
 
-const STATUS_ACTIONS: { id: ApplicationStatus; label: string }[] = [
-  { id: "en_revision", label: "En revisión" },
-  { id: "entrevista", label: "Entrevista" },
-  { id: "contratado", label: "Contratado" },
-  { id: "descartada", label: "Descartar" },
-];
+const STATUS_META: Record<
+  ApplicationStatus,
+  { label: string; color: string; bg: string }
+> = {
+  enviada: {
+    label: "Nueva",
+    color: "#F06808",
+    bg: "rgba(240, 104, 8, 0.14)",
+  },
+  en_revision: {
+    label: "En revisión",
+    color: "#0A84FF",
+    bg: "rgba(10, 132, 255, 0.14)",
+  },
+  entrevista: {
+    label: "Entrevista",
+    color: "#AF52DE",
+    bg: "rgba(175, 82, 222, 0.14)",
+  },
+  contratado: {
+    label: "Contratado",
+    color: "#34C759",
+    bg: "rgba(52, 199, 89, 0.14)",
+  },
+  descartada: {
+    label: "Descartada",
+    color: "#8E8E93",
+    bg: "rgba(142, 142, 147, 0.16)",
+  },
+};
 
 export function VacancyApplicantsModal({
   vacancy,
@@ -46,10 +71,20 @@ export function VacancyApplicantsModal({
     number | null
   >(null);
 
+  useEffect(() => {
+    if (!vacancy) {
+      setSelectedPostulacionId(null);
+    }
+  }, [vacancy]);
+
   const { data: applicants = [], isLoading } = useVacancyApplicants(
     vacancy?.id_vacante ?? null,
   );
-  const updateStatus = useUpdateApplicantStatus(vacancy?.id_vacante ?? null);
+
+  const handleCloseAll = () => {
+    setSelectedPostulacionId(null);
+    onClose();
+  };
 
   const sheetBg = isDark ? "#12100E" : "#F5F2EF";
   const cardBg = isDark ? "#181513" : "#FFFFFF";
@@ -62,204 +97,214 @@ export function VacancyApplicantsModal({
       visible={Boolean(vacancy)}
       animationType="slide"
       presentationStyle="pageSheet"
-      onRequestClose={onClose}
+      onRequestClose={() => {
+        if (selectedPostulacionId) {
+          setSelectedPostulacionId(null);
+        } else {
+          handleCloseAll();
+        }
+      }}
     >
-      <View style={[styles.container, { backgroundColor: sheetBg }]}>
-        <View
-          style={[
-            styles.header,
-            {
-              paddingTop: Math.max(insets.top, 18),
-              borderBottomColor: theme.inputBorder,
-            },
-          ]}
-        >
-          <View style={styles.flexOne}>
-            <Text style={[styles.title, { color: theme.text }]}>
-              Postulantes
-            </Text>
-            <Text
-              style={[styles.subtitle, { color: theme.textSecondary }]}
-              numberOfLines={1}
-            >
-              {vacancy?.titulo}
-            </Text>
-          </View>
-
-          <Pressable
-            onPress={onClose}
-            style={[styles.closeBtn, { backgroundColor: theme.inputBackground }]}
-          >
-            <X size={18} color={theme.text} />
-          </Pressable>
-        </View>
-
-        <ScrollView
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: Math.max(insets.bottom + 24, 36) },
-          ]}
-          showsVerticalScrollIndicator={false}
-        >
-          {isLoading ? (
-            <View style={styles.centerBox}>
-              <ActivityIndicator color={theme.primary} />
-            </View>
-          ) : applicants.length === 0 ? (
-            <View
-              style={[
-                styles.emptyCard,
-                { backgroundColor: cardBg, borderColor: cardBorder },
-              ]}
-            >
-              <Users size={26} color={theme.primary} />
-              <Text style={[styles.emptyTitle, { color: theme.text }]}>
-                Aún no hay postulantes
-              </Text>
-              <Text style={[styles.emptyDesc, { color: theme.textSecondary }]}>
-                Cuando los candidatos se postulen desde Empleos aparecerán aquí
-                y podrás consultar su perfil completo y solicitar documentos.
-              </Text>
-            </View>
-          ) : (
-            applicants.map((item) => {
-              const name = item.candidato?.nombre || "Candidato";
-              const initials = name.slice(0, 2).toUpperCase();
-
-              return (
-                <View
-                  key={item.id_postulacion}
-                  style={[
-                    styles.card,
-                    { backgroundColor: cardBg, borderColor: cardBorder },
-                  ]}
-                >
-                  <Pressable
-                    onPress={() => setSelectedPostulacionId(item.id_postulacion)}
-                    style={({ pressed }) => [
-                      styles.personRow,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <ProfileAvatar
-                      uri={item.candidato?.foto_perfil}
-                      initials={initials}
-                      size={46}
-                    />
-                    <View style={styles.flexOne}>
-                      <Text style={[styles.personName, { color: theme.text }]}>
-                        {name}
-                      </Text>
-                      {item.candidato?.email ? (
-                        <View style={styles.contactRow}>
-                          <Mail size={12} color={theme.textSecondary} />
-                          <Text
-                            style={[
-                              styles.contactText,
-                              { color: theme.textSecondary },
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {item.candidato.email}
-                          </Text>
-                        </View>
-                      ) : null}
-                      {item.candidato?.celular ? (
-                        <View style={styles.contactRow}>
-                          <Phone size={12} color={theme.textSecondary} />
-                          <Text
-                            style={[
-                              styles.contactText,
-                              { color: theme.textSecondary },
-                            ]}
-                          >
-                            {item.candidato.celular}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-
-                    <View
-                      style={[
-                        styles.viewProfilePill,
-                        { backgroundColor: theme.primarySoft },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.viewProfileText,
-                          { color: theme.primary },
-                        ]}
-                      >
-                        Ver perfil
-                      </Text>
-                      <ChevronRight size={13} color={theme.primary} />
-                    </View>
-                  </Pressable>
-
-                  {item.mensaje_presentacion ? (
-                    <Text
-                      style={[
-                        styles.coverNote,
-                        {
-                          color: theme.textSecondary,
-                          backgroundColor: theme.inputBackground,
-                        },
-                      ]}
-                      numberOfLines={2}
-                    >
-                      “{item.mensaje_presentacion}”
-                    </Text>
-                  ) : null}
-
-                  <View style={styles.statusRow}>
-                    {STATUS_ACTIONS.map((action) => {
-                      const active = item.estado === action.id;
-                      return (
-                        <Pressable
-                          key={action.id}
-                          onPress={() =>
-                            updateStatus.mutate({
-                              idPostulacion: item.id_postulacion,
-                              estado: action.id,
-                            })
-                          }
-                          style={[
-                            styles.statusChip,
-                            {
-                              backgroundColor: active
-                                ? theme.primary
-                                : theme.inputBackground,
-                              borderColor: active
-                                ? theme.primary
-                                : theme.inputBorder,
-                            },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.statusChipText,
-                              { color: active ? "#FFFFFF" : theme.text },
-                            ]}
-                          >
-                            {action.label}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-              );
-            })
-          )}
-        </ScrollView>
-
+      {selectedPostulacionId ? (
         <ApplicantProfileModal
           idPostulacion={selectedPostulacionId}
           idVacante={vacancy?.id_vacante ?? null}
-          onClose={() => setSelectedPostulacionId(null)}
+          onBack={() => setSelectedPostulacionId(null)}
+          onClose={handleCloseAll}
         />
-      </View>
+      ) : (
+        <View style={[styles.container, { backgroundColor: sheetBg }]}>
+          <View
+            style={[
+              styles.header,
+              {
+                paddingTop: Math.max(insets.top, 18),
+                borderBottomColor: theme.inputBorder,
+              },
+            ]}
+          >
+            <View style={styles.flexOne}>
+              <Text style={[styles.title, { color: theme.text }]}>
+                Postulantes
+              </Text>
+              <Text
+                style={[styles.subtitle, { color: theme.textSecondary }]}
+                numberOfLines={1}
+              >
+                {vacancy?.titulo}
+              </Text>
+            </View>
+
+            <Pressable
+              onPress={handleCloseAll}
+              style={[styles.closeBtn, { backgroundColor: theme.inputBackground }]}
+            >
+              <X size={18} color={theme.text} />
+            </Pressable>
+          </View>
+
+          <ScrollView
+            contentContainerStyle={[
+              styles.content,
+              { paddingBottom: Math.max(insets.bottom + 24, 36) },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
+            {isLoading ? (
+              <View style={styles.centerBox}>
+                <Spinner size={26} strokeWidth={2.6} color={theme.primary} />
+              </View>
+            ) : applicants.length === 0 ? (
+              <View
+                style={[
+                  styles.emptyCard,
+                  { backgroundColor: cardBg, borderColor: cardBorder },
+                ]}
+              >
+                <Users size={26} color={theme.primary} />
+                <Text style={[styles.emptyTitle, { color: theme.text }]}>
+                  Aún no hay postulantes
+                </Text>
+                <Text style={[styles.emptyDesc, { color: theme.textSecondary }]}>
+                  Cuando los candidatos se postulen desde Empleos aparecerán aquí
+                  y podrás consultar su perfil completo y solicitar documentos.
+                </Text>
+              </View>
+            ) : (
+              applicants.map((item) => {
+                const name = item.candidato?.nombre || "Candidato";
+                const initials = name.slice(0, 2).toUpperCase();
+                const statusMeta =
+                  STATUS_META[item.estado] ?? STATUS_META.enviada;
+
+                return (
+                  <Pressable
+                    key={item.id_postulacion}
+                    onPress={() =>
+                      setSelectedPostulacionId(item.id_postulacion)
+                    }
+                    style={({ pressed }) => [
+                      styles.card,
+                      { backgroundColor: cardBg, borderColor: cardBorder },
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <View style={styles.personRow}>
+                      <ProfileAvatar
+                        uri={item.candidato?.foto_perfil}
+                        initials={initials}
+                        size={48}
+                      />
+                      <View style={styles.flexOne}>
+                        <View style={styles.nameRow}>
+                          <Text
+                            style={[styles.personName, { color: theme.text }]}
+                            numberOfLines={1}
+                          >
+                            {name}
+                          </Text>
+                          <View
+                            style={[
+                              styles.statusBadge,
+                              { backgroundColor: statusMeta.bg },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.statusBadgeText,
+                                { color: statusMeta.color },
+                              ]}
+                            >
+                              {statusMeta.label}
+                            </Text>
+                          </View>
+                        </View>
+                        {item.candidato?.email ? (
+                          <View style={styles.contactRow}>
+                            <Mail size={12} color={theme.textSecondary} />
+                            <Text
+                              style={[
+                                styles.contactText,
+                                { color: theme.textSecondary },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {item.candidato.email}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {item.candidato?.celular ? (
+                          <View style={styles.contactRow}>
+                            <Phone size={12} color={theme.textSecondary} />
+                            <Text
+                              style={[
+                                styles.contactText,
+                                { color: theme.textSecondary },
+                              ]}
+                            >
+                              {item.candidato.celular}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    </View>
+
+                    {item.mensaje_presentacion ? (
+                      <Text
+                        style={[
+                          styles.coverNote,
+                          {
+                            color: theme.textSecondary,
+                            backgroundColor: theme.inputBackground,
+                          },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        “{item.mensaje_presentacion}”
+                      </Text>
+                    ) : null}
+
+                    <View
+                      style={[
+                        styles.cardFooter,
+                        {
+                          borderTopColor: isDark
+                            ? "rgba(255,255,255,0.07)"
+                            : "rgba(23,18,14,0.06)",
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.footerHint, { color: theme.textMuted }]}
+                      >
+                        {item.estado === "enviada"
+                          ? "Al abrir el perfil pasará a En revisión"
+                          : "Ver experiencia, CV y gestionar proceso"}
+                      </Text>
+                      <View
+                        style={[
+                          styles.viewProfilePill,
+                          { backgroundColor: theme.primarySoft },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.viewProfileText,
+                            { color: theme.primary },
+                          ]}
+                        >
+                          Ver perfil
+                        </Text>
+                        <ChevronRight size={13} color={theme.primary} />
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              })
+            )}
+          </ScrollView>
+        </View>
+      )}
     </Modal>
   );
 }
@@ -339,11 +384,30 @@ const styles = StyleSheet.create({
   personRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 11,
+    gap: 12,
+  },
+
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
   },
 
   personName: {
+    flex: 1,
     fontSize: 15,
+    fontWeight: "700",
+  },
+
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+
+  statusBadgeText: {
+    fontSize: 11,
     fontWeight: "700",
   },
 
@@ -355,20 +419,7 @@ const styles = StyleSheet.create({
 
   contactText: {
     fontSize: 12,
-  },
-
-  viewProfilePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-
-  viewProfileText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    flex: 1,
   },
 
   coverNote: {
@@ -378,25 +429,36 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
 
-  statusRow: {
+  cardFooter: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 10,
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
   },
 
-  statusChip: {
+  footerHint: {
+    flex: 1,
+    fontSize: 11.5,
+    fontWeight: "500",
+  },
+
+  viewProfilePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    borderWidth: 1,
   },
 
-  statusChipText: {
+  viewProfileText: {
     fontSize: 11.5,
     fontWeight: "700",
   },
 
   pressed: {
-    opacity: 0.75,
+    transform: [{ scale: 0.988 }],
   },
 });

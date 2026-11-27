@@ -1,10 +1,13 @@
 import axios from "axios";
 import * as Haptics from "expo-haptics";
+import { Image } from "expo-image";
 import * as WebBrowser from "expo-web-browser";
 import {
+  ArrowLeft,
   Award,
   Briefcase,
   Calendar,
+  CalendarClock,
   CheckCircle2,
   ExternalLink,
   FileText,
@@ -14,16 +17,16 @@ import {
   Mail,
   MapPin,
   Phone,
+  QrCode,
   Send,
   ShieldCheck,
   X,
+  XCircle,
 } from "lucide-react-native";
 import { useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Linking,
-  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -35,6 +38,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppButton } from "@/components/ui/AppButton";
+import { Spinner } from "@/components/ui/Spinner";
 import { ProfileAvatar } from "@/features/profile/components/ProfileAvatar";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
@@ -44,12 +48,19 @@ import {
   useRequestApplicantDocuments,
 } from "../hooks/use-applicant-profile";
 import { useUpdateApplicantStatus } from "../hooks/use-employer-vacancies";
+import {
+  useResolveInterviewQr,
+  useScheduleApplicantInterview,
+} from "../hooks/use-interviews";
 import type { ApplicationStatus } from "../types/employer.types";
+import type { ScheduleInterviewInput } from "../types/interviews.types";
 import { RequestDocumentsModal } from "./RequestDocumentsModal";
+import { ScheduleInterviewOverlay } from "./ScheduleInterviewOverlay";
 
 interface ApplicantProfileModalProps {
   idPostulacion: number | null;
   idVacante: number | null;
+  onBack?: () => void;
   onClose: () => void;
 }
 
@@ -98,6 +109,7 @@ function extractErr(error: unknown, fallback: string) {
 export function ApplicantProfileModal({
   idPostulacion,
   idVacante,
+  onBack,
   onClose,
 }: ApplicantProfileModalProps) {
   const isDark = useColorScheme() === "dark";
@@ -108,13 +120,25 @@ export function ApplicantProfileModal({
     data,
     isLoading,
     isRefetching,
+    error,
     refetch,
-  } = useApplicantFullProfile(idPostulacion);
+  } = useApplicantFullProfile(idPostulacion, idVacante);
   const updateStatus = useUpdateApplicantStatus(idVacante);
   const requestDocs = useRequestApplicantDocuments(idPostulacion);
+  const scheduleInterview = useScheduleApplicantInterview(
+    idPostulacion,
+    idVacante,
+  );
+  const resolveInterview = useResolveInterviewQr();
 
   const [requestModalOpen, setRequestModalOpen] = useState(false);
+  const [interviewModalOpen, setInterviewModalOpen] = useState(false);
   const [preselectedDoc, setPreselectedDoc] = useState<string | null>(null);
+  const [updatingStatus, setUpdatingStatus] =
+    useState<ApplicationStatus | null>(null);
+  const [resolvingInterviewAction, setResolvingInterviewAction] = useState<
+    "aprobar" | "rechazar" | null
+  >(null);
 
   if (!idPostulacion) return null;
 
@@ -146,6 +170,56 @@ export function ApplicantProfileModal({
   const documentos = data?.documentos ?? [];
   const solicitudes = data?.solicitudes ?? [];
   const cv = data?.cv;
+  const entrevistaActiva = data?.entrevista_activa ?? null;
+
+  const handleScheduleInterviewSubmit = async (
+    input: ScheduleInterviewInput,
+  ) => {
+    try {
+      const res = await scheduleInterview.mutateAsync(input);
+      if (Platform.OS !== "web") {
+        void Haptics.notificationAsync(
+          Haptics.NotificationFeedbackType.Success,
+        );
+      }
+      setInterviewModalOpen(false);
+      await refetch();
+      Alert.alert(
+        "Pase QR generado",
+        `${res.mensaje}\n\nCódigo de acceso: ${res.entrevista.codigo_corto}`,
+      );
+    } catch (error) {
+      Alert.alert(
+        "No se pudo agendar",
+        extractErr(error, "No fue posible programar la entrevista."),
+      );
+    }
+  };
+
+  const handleResolveActiveInterview = async (
+    accion: "aprobar" | "rechazar",
+  ) => {
+    if (!entrevistaActiva) return;
+    setResolvingInterviewAction(accion);
+    try {
+      const res = await resolveInterview.mutateAsync({
+        idEntrevista: entrevistaActiva.id_entrevista,
+        accion,
+      });
+      await refetch();
+      Alert.alert(
+        accion === "aprobar" ? "Acceso aprobado" : "Acceso rechazado",
+        res.mensaje,
+      );
+    } catch (error) {
+      Alert.alert(
+        "No se pudo actualizar",
+        extractErr(error, "Intenta nuevamente."),
+      );
+    } finally {
+      setResolvingInterviewAction(null);
+    }
+  };
 
   const uploadedDocsCount = documentos.filter((d) => d.subido).length;
   const authorizedDocsCount = documentos.filter((d) => d.autorizado).length;
@@ -182,6 +256,8 @@ export function ApplicantProfileModal({
   };
 
   const handleStatusChange = async (estado: ApplicationStatus) => {
+    if (updatingStatus) return;
+    setUpdatingStatus(estado);
     try {
       await updateStatus.mutateAsync({ idPostulacion, estado });
       await refetch();
@@ -191,58 +267,70 @@ export function ApplicantProfileModal({
         "Error",
         extractErr(error, "No se pudo actualizar el estado."),
       );
+    } finally {
+      setUpdatingStatus(null);
     }
   };
 
   return (
-    <Modal
-      visible
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
-      <View style={[styles.container, { backgroundColor: sheetBg }]}>
-        <View
-          style={[
-            styles.header,
-            {
-              paddingTop: Math.max(insets.top, 16),
-              borderBottomColor: theme.inputBorder,
-            },
-          ]}
-        >
-          <View style={styles.flexOne}>
-            <Text style={[styles.headerTitle, { color: theme.text }]}>
-              Perfil del candidato
-            </Text>
-            {data?.vacante?.titulo ? (
-              <Text
-                style={[styles.headerSub, { color: theme.textSecondary }]}
-                numberOfLines={1}
-              >
-                {data.vacante.titulo}
-              </Text>
-            ) : null}
-          </View>
+    <View style={[styles.container, { backgroundColor: sheetBg }]}>
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: Math.max(insets.top, 16),
+            borderBottomColor: theme.inputBorder,
+          },
+        ]}
+      >
+        {onBack ? (
           <Pressable
-            onPress={onClose}
+            onPress={onBack}
             style={[styles.closeBtn, { backgroundColor: theme.inputBackground }]}
+            accessibilityLabel="Volver a postulantes"
           >
-            <X size={18} color={theme.text} />
+            <ArrowLeft size={18} color={theme.text} />
           </Pressable>
-        </View>
+        ) : null}
 
-        {isLoading ? (
-          <View style={styles.loaderBox}>
-            <ActivityIndicator color={theme.primary} />
-          </View>
-        ) : !data ? (
-          <View style={styles.loaderBox}>
-            <Text style={{ color: theme.textSecondary }}>
-              No se pudo cargar el perfil del postulante.
+        <View style={styles.flexOne}>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>
+            Perfil del candidato
+          </Text>
+          {data?.vacante?.titulo ? (
+            <Text
+              style={[styles.headerSub, { color: theme.textSecondary }]}
+              numberOfLines={1}
+            >
+              {data.vacante.titulo}
             </Text>
+          ) : null}
+        </View>
+        <Pressable
+          onPress={onClose}
+          style={[styles.closeBtn, { backgroundColor: theme.inputBackground }]}
+        >
+          <X size={18} color={theme.text} />
+        </Pressable>
+      </View>
+
+      {isLoading ? (
+        <View style={styles.loaderBox}>
+          <Spinner size={28} strokeWidth={2.8} color={theme.primary} />
+        </View>
+      ) : !data ? (
+        <View style={styles.loaderBox}>
+          <Text style={[styles.errorText, { color: theme.textSecondary }]}>
+            {extractErr(
+              error,
+              "No se pudo cargar el perfil del postulante.",
+            )}
+          </Text>
+          <View style={styles.retryWrap}>
+            <AppButton title="Reintentar" onPress={() => void refetch()} />
           </View>
-        ) : (
+        </View>
+      ) : (
           <ScrollView
             contentContainerStyle={[
               styles.content,
@@ -352,35 +440,209 @@ export function ApplicantProfileModal({
                 <View style={styles.statusChips}>
                   {STATUS_ACTIONS.map((action) => {
                     const active = data.postulacion.estado === action.id;
+                    const isUpdatingThis = updatingStatus === action.id;
                     return (
                       <Pressable
                         key={action.id}
+                        disabled={Boolean(updatingStatus)}
                         onPress={() => void handleStatusChange(action.id)}
                         style={[
                           styles.statusChip,
                           {
-                            backgroundColor: active
-                              ? theme.primary
-                              : theme.inputBackground,
-                            borderColor: active
-                              ? theme.primary
-                              : theme.inputBorder,
+                            backgroundColor:
+                              active || isUpdatingThis
+                                ? theme.primary
+                                : theme.inputBackground,
+                            borderColor:
+                              active || isUpdatingThis
+                                ? theme.primary
+                                : theme.inputBorder,
+                            opacity:
+                              updatingStatus && !isUpdatingThis ? 0.55 : 1,
                           },
                         ]}
                       >
-                        <Text
-                          style={[
-                            styles.statusChipText,
-                            { color: active ? "#FFFFFF" : theme.text },
-                          ]}
-                        >
-                          {action.label}
-                        </Text>
+                        <View style={styles.chipContent}>
+                          {isUpdatingThis ? (
+                            <Spinner size={15} strokeWidth={2.2} color="#FFFFFF" />
+                          ) : (
+                            <Text
+                              style={[
+                                styles.statusChipText,
+                                {
+                                  color: active ? "#FFFFFF" : theme.text,
+                                },
+                              ]}
+                            >
+                              {action.label}
+                            </Text>
+                          )}
+                        </View>
                       </Pressable>
                     );
                   })}
                 </View>
               </View>
+            </View>
+
+            {/* 1.5 Entrevista presencial con ubicación, foto y Pase QR */}
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: cardBg, borderColor: cardBorder },
+              ]}
+            >
+              <View style={styles.sectionHeaderRow}>
+                <QrCode size={17} color={theme.primary} />
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                  Entrevista presencial y Pase QR
+                </Text>
+              </View>
+
+              {entrevistaActiva ? (
+                <View style={styles.interviewBox}>
+                  <View style={styles.interviewTopRow}>
+                    <Text
+                      style={[styles.interviewCode, { color: theme.primary }]}
+                    >
+                      Código QR: {entrevistaActiva.codigo_corto}
+                    </Text>
+                    <View
+                      style={[
+                        styles.interviewStatusPill,
+                        {
+                          backgroundColor:
+                            entrevistaActiva.estado === "aprobada"
+                              ? "rgba(52, 199, 89, 0.14)"
+                              : entrevistaActiva.estado === "rechazada"
+                                ? "rgba(255, 59, 48, 0.14)"
+                                : "rgba(255, 159, 10, 0.14)",
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.interviewStatusText,
+                          {
+                            color:
+                              entrevistaActiva.estado === "aprobada"
+                                ? "#34C759"
+                                : entrevistaActiva.estado === "rechazada"
+                                  ? "#FF3B30"
+                                  : "#FF9F0A",
+                          },
+                        ]}
+                      >
+                        {entrevistaActiva.estado === "aprobada"
+                          ? "Acceso aprobado"
+                          : entrevistaActiva.estado === "rechazada"
+                            ? "Acceso rechazado"
+                            : "Pendiente de acceso"}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {entrevistaActiva.fecha_hora ? (
+                    <View style={styles.inlineMeta}>
+                      <CalendarClock size={13} color={theme.textSecondary} />
+                      <Text
+                        style={[
+                          styles.metaText,
+                          { color: theme.textSecondary },
+                        ]}
+                      >
+                        {entrevistaActiva.fecha_hora}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  <View style={styles.inlineMeta}>
+                    <MapPin size={13} color={theme.textSecondary} />
+                    <Text
+                      style={[styles.metaText, { color: theme.textSecondary }]}
+                    >
+                      {entrevistaActiva.direccion_oficina}
+                    </Text>
+                  </View>
+
+                  {entrevistaActiva.foto_referencia_url ? (
+                    <Image
+                      source={{ uri: entrevistaActiva.foto_referencia_url }}
+                      style={styles.officeThumb}
+                      contentFit="cover"
+                    />
+                  ) : null}
+
+                  {entrevistaActiva.estado === "pendiente" ? (
+                    <View style={styles.interviewActionsRow}>
+                      <Pressable
+                        disabled={Boolean(resolvingInterviewAction)}
+                        onPress={() =>
+                          void handleResolveActiveInterview("aprobar")
+                        }
+                        style={styles.interviewApproveBtn}
+                      >
+                        {resolvingInterviewAction === "aprobar" ? (
+                          <Spinner
+                            size={16}
+                            strokeWidth={2.2}
+                            color="#FFFFFF"
+                          />
+                        ) : (
+                          <>
+                            <CheckCircle2 size={15} color="#FFFFFF" />
+                            <Text style={styles.interviewActionText}>
+                              Aprobar
+                            </Text>
+                          </>
+                        )}
+                      </Pressable>
+                      <Pressable
+                        disabled={Boolean(resolvingInterviewAction)}
+                        onPress={() =>
+                          void handleResolveActiveInterview("rechazar")
+                        }
+                        style={styles.interviewRejectBtn}
+                      >
+                        {resolvingInterviewAction === "rechazar" ? (
+                          <Spinner
+                            size={16}
+                            strokeWidth={2.2}
+                            color="#FFFFFF"
+                          />
+                        ) : (
+                          <>
+                            <XCircle size={15} color="#FFFFFF" />
+                            <Text style={styles.interviewActionText}>
+                              Rechazar
+                            </Text>
+                          </>
+                        )}
+                      </Pressable>
+                    </View>
+                  ) : null}
+
+                  <AppButton
+                    title="Reprogramar y generar nuevo QR"
+                    variant="secondary"
+                    onPress={() => setInterviewModalOpen(true)}
+                  />
+                </View>
+              ) : (
+                <>
+                  <Text
+                    style={[styles.privacyNotice, { color: theme.textSecondary }]}
+                  >
+                    Envía la ubicación de tu oficina, una foto de referencia y
+                    genera un Pase QR único para confirmar que quien llega es el
+                    candidato postulado.
+                  </Text>
+                  <AppButton
+                    title="Agendar entrevista y enviar QR"
+                    onPress={() => setInterviewModalOpen(true)}
+                  />
+                </>
+              )}
             </View>
 
             {/* 2. Currículum Vitae (CV) */}
@@ -794,21 +1056,29 @@ export function ApplicantProfileModal({
           </ScrollView>
         )}
 
-        <RequestDocumentsModal
-          visible={requestModalOpen}
-          candidateName={fullName}
-          cvUploaded={Boolean(cv?.subido)}
-          documents={documentos}
-          preselectedDoc={preselectedDoc}
-          submitting={requestDocs.isPending}
-          onClose={() => {
-            setRequestModalOpen(false);
-            setPreselectedDoc(null);
-          }}
-          onSubmit={handleRequestSubmit}
-        />
-      </View>
-    </Modal>
+      <ScheduleInterviewOverlay
+        visible={interviewModalOpen}
+        candidateName={fullName}
+        vacancyTitle={data?.vacante?.titulo}
+        submitting={scheduleInterview.isPending}
+        onClose={() => setInterviewModalOpen(false)}
+        onSubmit={handleScheduleInterviewSubmit}
+      />
+
+      <RequestDocumentsModal
+        visible={requestModalOpen}
+        candidateName={fullName}
+        cvUploaded={Boolean(cv?.subido)}
+        documents={documentos}
+        preselectedDoc={preselectedDoc}
+        submitting={requestDocs.isPending}
+        onClose={() => {
+          setRequestModalOpen(false);
+          setPreselectedDoc(null);
+        }}
+        onSubmit={handleRequestSubmit}
+      />
+    </View>
   );
 }
 
@@ -852,6 +1122,19 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 24,
+    gap: 14,
+  },
+
+  errorText: {
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+
+  retryWrap: {
+    width: "100%",
+    maxWidth: 220,
   },
 
   content: {
@@ -944,10 +1227,19 @@ const styles = StyleSheet.create({
   },
 
   statusChip: {
+    minWidth: 78,
+    minHeight: 32,
     paddingHorizontal: 11,
     paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  chipContent: {
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   statusChipText: {
@@ -1157,5 +1449,71 @@ const styles = StyleSheet.create({
 
   pressed: {
     opacity: 0.72,
+  },
+
+  interviewBox: {
+    gap: 9,
+  },
+
+  interviewTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+
+  interviewCode: {
+    fontSize: 13.5,
+    fontWeight: "800",
+  },
+
+  interviewStatusPill: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+
+  interviewStatusText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+
+  officeThumb: {
+    width: "100%",
+    height: 130,
+    borderRadius: 13,
+  },
+
+  interviewActionsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+
+  interviewApproveBtn: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 12,
+    backgroundColor: "#34C759",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+
+  interviewRejectBtn: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 12,
+    backgroundColor: "#FF3B30",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+
+  interviewActionText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "800",
   },
 });

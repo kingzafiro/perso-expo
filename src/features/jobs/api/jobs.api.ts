@@ -28,6 +28,40 @@ export async function fetchPublicVacanciesApi(filters?: {
   return data.vacantes ?? [];
 }
 
+export async function fetchFavoriteVacanciesApi(): Promise<EmployerVacancy[]> {
+  const { data } = await apiClient.get<{
+    ok: boolean;
+    vacantes: EmployerVacancy[];
+  }>("/favoritos", {
+    baseURL: env.vacanciesApiUrl,
+  });
+
+  return data.vacantes ?? [];
+}
+
+export async function toggleFavoriteVacancyApi(
+  idVacante: number,
+  favorito?: boolean,
+): Promise<{
+  ok: boolean;
+  mensaje: string;
+  id_vacante: number;
+  es_favorito: boolean;
+}> {
+  const { data } = await apiClient.post<{
+    ok: boolean;
+    mensaje: string;
+    id_vacante: number;
+    es_favorito: boolean;
+  }>(
+    `/${idVacante}/favorito`,
+    typeof favorito === "boolean" ? { favorito } : undefined,
+    { baseURL: env.vacanciesApiUrl },
+  );
+
+  return data;
+}
+
 export async function applyToVacancyApi(
   idVacante: number,
   mensaje_presentacion?: string,

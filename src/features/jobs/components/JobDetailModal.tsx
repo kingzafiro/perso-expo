@@ -25,12 +25,19 @@ import {
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 
-import { useApplyToVacancy, useReportVacancy } from "../hooks/use-jobs";
+import {
+  useApplyToVacancy,
+  useReportVacancy,
+  useToggleFavoriteVacancy,
+} from "../hooks/use-jobs";
+import { ApplyVacancyModal } from "./ApplyVacancyModal";
+import { FavoriteButton } from "./FavoriteButton";
 
 interface JobDetailModalProps {
   vacancy: EmployerVacancy | null;
   onClose: () => void;
   onApplied?: (idVacante: number) => void;
+  onFavoriteChanged?: (idVacante: number, isFavorite: boolean) => void;
 }
 
 function getErr(error: unknown, fallback: string) {
@@ -46,6 +53,7 @@ export function JobDetailModal({
   vacancy,
   onClose,
   onApplied,
+  onFavoriteChanged,
 }: JobDetailModalProps) {
   const isDark = useColorScheme() === "dark";
   const theme = useTheme();
@@ -53,6 +61,7 @@ export function JobDetailModal({
 
   const applyMutation = useApplyToVacancy();
   const reportMutation = useReportVacancy();
+  const { toggleFavorite } = useToggleFavoriteVacancy();
 
   const [showApplyPrompt, setShowApplyPrompt] = useState(false);
   const [coverMessage, setCoverMessage] = useState("");
@@ -65,6 +74,15 @@ export function JobDetailModal({
 
   const sheetBg = isDark ? "#0D0B0A" : "#F5F2EF";
   const cardBg = isDark ? "#181513" : "#FFFFFF";
+
+  const handleToggleFavorite = () => {
+    const nextState = toggleFavorite(vacancy, {
+      onSettled: (id, finalState) => {
+        onFavoriteChanged?.(id, finalState);
+      },
+    });
+    onFavoriteChanged?.(vacancy.id_vacante, nextState);
+  };
 
   const handleConfirmApply = async () => {
     try {
@@ -130,12 +148,23 @@ export function JobDetailModal({
           >
             Detalle de vacante
           </Text>
-          <Pressable
-            onPress={onClose}
-            style={[styles.closeBtn, { backgroundColor: theme.inputBackground }]}
-          >
-            <X size={18} color={theme.text} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            <FavoriteButton
+              isFavorite={Boolean(vacancy.es_favorito)}
+              onPress={handleToggleFavorite}
+              size={17}
+              variant="header"
+            />
+            <Pressable
+              onPress={onClose}
+              style={[
+                styles.iconBtn,
+                { backgroundColor: theme.inputBackground },
+              ]}
+            >
+              <X size={18} color={theme.text} />
+            </Pressable>
+          </View>
         </View>
 
         <ScrollView
@@ -154,66 +183,21 @@ export function JobDetailModal({
           />
         </ScrollView>
 
-        {/* Sub-modal: Postularse con nota opcional */}
-        <Modal
+        {/* Sub-modal: Validación de requisitos mínimos, visibilidad y mensaje opcional */}
+        <ApplyVacancyModal
           visible={showApplyPrompt}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setShowApplyPrompt(false)}
-        >
-          <View style={styles.backdrop}>
-            <View style={[styles.dialog, { backgroundColor: cardBg }]}>
-              <Text style={[styles.dialogTitle, { color: theme.text }]}>
-                Postularse a {vacancy.titulo}
-              </Text>
-              <Text style={[styles.dialogSub, { color: theme.textSecondary }]}>
-                La empresa recibirá tu perfil de Perso. Puedes añadir un mensaje
-                breve opcional:
-              </Text>
-              <TextInput
-                value={coverMessage}
-                onChangeText={setCoverMessage}
-                placeholder="Ej. Cuento con 2 años de experiencia y disponibilidad inmediata..."
-                placeholderTextColor={theme.textMuted}
-                multiline
-                maxLength={600}
-                style={[
-                  styles.dialogInput,
-                  {
-                    backgroundColor: theme.inputBackground,
-                    borderColor: theme.inputBorder,
-                    color: theme.text,
-                  },
-                ]}
-              />
-              <View style={styles.dialogActions}>
-                <AppButton
-                  title="Enviar postulación"
-                  loading={applyMutation.isPending}
-                  onPress={() => void handleConfirmApply()}
-                />
-                <Pressable
-                  onPress={() => setShowApplyPrompt(false)}
-                  style={styles.cancelBtn}
-                >
-                  <Text
-                    style={[styles.cancelText, { color: theme.textSecondary }]}
-                  >
-                    Cancelar
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-        </Modal>
+          vacancy={vacancy}
+          coverMessage={coverMessage}
+          onChangeCoverMessage={setCoverMessage}
+          submitting={applyMutation.isPending}
+          onToggleFavorite={handleToggleFavorite}
+          onConfirmApply={() => void handleConfirmApply()}
+          onClose={() => setShowApplyPrompt(false)}
+          onNavigateAway={onClose}
+        />
 
-        {/* Sub-modal: Reportar empleo */}
-        <Modal
-          visible={showReportPrompt}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setShowReportPrompt(false)}
-        >
+        {/* Sub-vista superpuesta: Reportar empleo (sin Modal anidado en iOS) */}
+        {showReportPrompt ? (
           <View style={styles.backdrop}>
             <View style={[styles.dialog, { backgroundColor: cardBg }]}>
               <Text style={[styles.dialogTitle, { color: theme.text }]}>
@@ -285,7 +269,7 @@ export function JobDetailModal({
               </View>
             </View>
           </View>
-        </Modal>
+        ) : null}
       </View>
     </Modal>
   );
@@ -308,9 +292,16 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 17,
     fontWeight: "800",
+    flex: 1,
   },
 
-  closeBtn: {
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  iconBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -323,7 +314,12 @@ const styles = StyleSheet.create({
   },
 
   backdrop: {
-    flex: 1,
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 50,
     backgroundColor: "rgba(0, 0, 0, 0.56)",
     alignItems: "center",
     justifyContent: "center",
@@ -341,11 +337,6 @@ const styles = StyleSheet.create({
   dialogTitle: {
     fontSize: 18,
     fontWeight: "800",
-  },
-
-  dialogSub: {
-    fontSize: 13,
-    lineHeight: 19,
   },
 
   dialogInput: {

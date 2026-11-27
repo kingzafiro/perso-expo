@@ -1,4 +1,5 @@
 import type { ApplicationStatus } from "./employer.types";
+import type { InterviewPass } from "./interviews.types";
 
 export type DocumentRequestStatus =
   | "pendiente"
@@ -53,6 +54,7 @@ export interface ApplicantFullProfilePayload {
     id_postulacion: number;
     id_vacante: number;
     estado: ApplicationStatus;
+    auto_en_revision?: boolean;
     mensaje_presentacion: string;
     createdAt: string | null;
   };
@@ -105,4 +107,5 @@ export interface ApplicantFullProfilePayload {
   };
   documentos: ApplicantDocumentItem[];
   solicitudes: DocumentAccessRequest[];
+  entrevista_activa?: InterviewPass | null;
 }

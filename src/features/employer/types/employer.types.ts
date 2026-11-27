@@ -110,6 +110,12 @@ export interface VacancyCompanySummary {
   contacto_cargo?: string;
 }
 
+export interface VacancyApplicantPreview {
+  id_usuario: number;
+  nombre: string;
+  foto_perfil: string | null;
+}
+
 export interface EmployerVacancy {
   id_vacante: number;
   id_empresa: number;
@@ -134,8 +140,10 @@ export interface EmployerVacancy {
   contacto_visible: string;
   estado: VacancyStatus;
   postulantes_count: number;
+  postulantes_preview?: VacancyApplicantPreview[];
   ya_postulado?: boolean;
   estado_postulacion?: ApplicationStatus | null;
+  es_favorito?: boolean;
   empresa?: VacancyCompanySummary | null;
   createdAt: string | null;
   updatedAt: string | null;

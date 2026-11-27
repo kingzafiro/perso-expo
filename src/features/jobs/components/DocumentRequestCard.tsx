@@ -10,6 +10,7 @@ import {
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
+import { Spinner } from "@/components/ui/Spinner";
 import type { DocumentAccessRequest } from "@/features/employer/types/applicant-profile.types";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
@@ -181,9 +182,15 @@ export function DocumentRequestCard({
               pressed && styles.pressed,
             ]}
           >
-            <Text style={[styles.rejectText, { color: theme.textSecondary }]}>
-              Rechazar solicitud
-            </Text>
+            {loading ? (
+              <Spinner size={18} strokeWidth={2.2} color={theme.textSecondary} />
+            ) : (
+              <Text
+                style={[styles.rejectText, { color: theme.textSecondary }]}
+              >
+                Rechazar solicitud
+              </Text>
+            )}
           </Pressable>
         </View>
       ) : isApproved ? (
@@ -200,7 +207,11 @@ export function DocumentRequestCard({
               pressed && styles.pressed,
             ]}
           >
-            <Text style={styles.revokeText}>Revocar acceso</Text>
+            {loading ? (
+              <Spinner size={16} strokeWidth={2.2} color="#FF3B30" />
+            ) : (
+              <Text style={styles.revokeText}>Revocar acceso</Text>
+            )}
           </Pressable>
         </View>
       ) : (

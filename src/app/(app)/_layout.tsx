@@ -1,7 +1,9 @@
 import { NativeTabs } from "expo-router/native-tabs";
+import { useEffect } from "react";
 import { DynamicColorIOS, Platform } from "react-native";
 
 import { useTheme } from "@/hooks/use-theme";
+import { useEmployerStore } from "@/stores/employer.store";
 import { brandPalette } from "@/theme";
 
 const iosTintColor =
@@ -14,6 +16,15 @@ const iosTintColor =
 
 export default function AppLayout() {
   const theme = useTheme();
+  const hasAccess = useEmployerStore((state) => state.hasAccess);
+  const isAdmin = useEmployerStore((state) => state.isAdmin);
+  const syncFromServer = useEmployerStore((state) => state.syncFromServer);
+
+  const hasEmployerTab = isAdmin || hasAccess;
+
+  useEffect(() => {
+    void syncFromServer();
+  }, [syncFromServer]);
 
   return (
     <NativeTabs
@@ -53,6 +64,14 @@ export default function AppLayout() {
         <NativeTabs.Trigger.Icon
           sf={{ default: "briefcase", selected: "briefcase.fill" }}
           md="work"
+        />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="empresas" hidden={!hasEmployerTab}>
+        <NativeTabs.Trigger.Label>Empresas</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          sf={{ default: "building.2", selected: "building.2.fill" }}
+          md="business"
         />
       </NativeTabs.Trigger>
 

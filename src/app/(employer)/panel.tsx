@@ -8,6 +8,7 @@ import {
   Lock,
   Pencil,
   Plus,
+  QrCode,
   ShieldCheck,
   X,
 } from "lucide-react-native";
@@ -31,6 +32,7 @@ import { useBilling } from "@/features/billing/hooks/use-billing";
 import type { CreateVacancyInput } from "@/features/employer/api/employer.api";
 import { AdminOverviewCard } from "@/features/employer/components/AdminOverviewCard";
 import { CreateVacancyModal } from "@/features/employer/components/CreateVacancyModal";
+import { EmployerInterviewsModal } from "@/features/employer/components/EmployerInterviewsModal";
 import { SubscriptionStatusCard } from "@/features/employer/components/SubscriptionStatusCard";
 import { VacancyApplicantsModal } from "@/features/employer/components/VacancyApplicantsModal";
 import { VacancyCard } from "@/features/employer/components/VacancyCard";
@@ -42,6 +44,7 @@ import {
   useUpdateEmployerVacancy,
   useUpdateEmployerVacancyStatus,
 } from "@/features/employer/hooks/use-employer-vacancies";
+import { useEmployerInterviews } from "@/features/employer/hooks/use-interviews";
 import type {
   EmployerVacancy,
   VacancyStatus,
@@ -96,13 +99,28 @@ export default function EmployerPanelScreen() {
   );
   const [applicantsVacancy, setApplicantsVacancy] =
     useState<EmployerVacancy | null>(null);
+  const [interviewsModalOpen, setInterviewsModalOpen] = useState(false);
   const [updatingVacancyId, setUpdatingVacancyId] = useState<number | null>(
     null,
   );
+  const [deletingVacancyId, setDeletingVacancyId] = useState<number | null>(
+    null,
+  );
+
+  const { data: employerInterviews = [] } = useEmployerInterviews(canEnterPanel);
+  const pendingInterviewsCount = employerInterviews.filter(
+    (item) => item.estado === "pendiente",
+  ).length;
 
   useEffect(() => {
     void syncFromServer();
   }, [syncFromServer]);
+
+  useEffect(() => {
+    if (canEnterPanel) {
+      router.replace("/(app)/empresas");
+    }
+  }, [canEnterPanel]);
 
   const screenBg = isDark ? "#000000" : "#F5F2EF";
   const cardBg = isDark ? "#181513" : "#FFFFFF";
@@ -175,6 +193,7 @@ export default function EmployerPanelScreen() {
           text: "Eliminar",
           style: "destructive",
           onPress: async () => {
+            setDeletingVacancyId(vacancy.id_vacante);
             try {
               await deleteVacancy.mutateAsync(vacancy.id_vacante);
             } catch (error) {
@@ -182,6 +201,8 @@ export default function EmployerPanelScreen() {
                 "Error",
                 extractErrorMessage(error, "No se pudo eliminar la vacante."),
               );
+            } finally {
+              setDeletingVacancyId(null);
             }
           },
         },
@@ -265,6 +286,14 @@ export default function EmployerPanelScreen() {
         </View>
 
         <View style={styles.topBarActions}>
+          <Pressable
+            onPress={() => setInterviewsModalOpen(true)}
+            style={[styles.iconBtn, { backgroundColor: theme.primarySoft }]}
+            accessibilityLabel="Escanear y ver registro QR de entrevistas"
+          >
+            <QrCode size={17} color={theme.primary} />
+          </Pressable>
+
           <Pressable
             onPress={() => {
               startEditFromProfile();
@@ -359,6 +388,36 @@ export default function EmployerPanelScreen() {
           </Pressable>
         )}
 
+        <Pressable
+          onPress={() => setInterviewsModalOpen(true)}
+          style={({ pressed }) => [
+            styles.verifyPrompt,
+            { backgroundColor: cardBg, borderColor: cardBorder },
+            pressed && styles.pressed,
+          ]}
+        >
+          <View
+            style={[
+              styles.verifyPromptIcon,
+              { backgroundColor: theme.primarySoft },
+            ]}
+          >
+            <QrCode size={18} color={theme.primary} />
+          </View>
+          <View style={styles.flexOne}>
+            <Text style={[styles.verifyPromptTitle, { color: theme.text }]}>
+              Registro de entrevistas y escáner QR
+            </Text>
+            <Text
+              style={[styles.verifyPromptSub, { color: theme.textSecondary }]}
+            >
+              {pendingInterviewsCount > 0
+                ? `${pendingInterviewsCount} pase${pendingInterviewsCount === 1 ? "" : "s"} pendiente${pendingInterviewsCount === 1 ? "" : "s"} de verificación · Toca para escanear`
+                : "Escanea el Pase QR del postulante para aprobar o rechazar su acceso"}
+            </Text>
+          </View>
+        </Pressable>
+
         <View style={styles.sectionHeader}>
           <View style={styles.flexOne}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>
@@ -432,6 +491,7 @@ export default function EmployerPanelScreen() {
                 key={vacancy.id_vacante}
                 vacancy={vacancy}
                 updating={updatingVacancyId === vacancy.id_vacante}
+                deleting={deletingVacancyId === vacancy.id_vacante}
                 onPreview={() => setPreviewVacancy(vacancy)}
                 onEdit={() => {
                   setEditingVacancy(vacancy);
@@ -464,6 +524,11 @@ export default function EmployerPanelScreen() {
       <VacancyApplicantsModal
         vacancy={applicantsVacancy}
         onClose={() => setApplicantsVacancy(null)}
+      />
+
+      <EmployerInterviewsModal
+        visible={interviewsModalOpen}
+        onClose={() => setInterviewsModalOpen(false)}
       />
 
       <Modal

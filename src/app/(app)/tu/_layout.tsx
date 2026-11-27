@@ -11,6 +11,8 @@ export default function TuLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="perfil" />
       <Stack.Screen name="documentos" />
+      <Stack.Screen name="favoritos" />
+      <Stack.Screen name="entrevistas" />
       <Stack.Screen name="solicitudes" />
       <Stack.Screen
         name="escanear"

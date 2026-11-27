@@ -5,6 +5,7 @@ import {
 } from "expo-glass-effect";
 import { router } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
+import type { ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -14,11 +15,13 @@ import { useTheme } from "@/hooks/use-theme";
 interface SettingsHeaderProps {
   title: string;
   showBack?: boolean;
+  rightElement?: ReactNode;
 }
 
 export function SettingsHeader({
   title,
   showBack = true,
+  rightElement,
 }: SettingsHeaderProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -84,7 +87,7 @@ export function SettingsHeader({
         {title}
       </Text>
 
-      <View style={styles.sideSlot} />
+      <View style={styles.rightSlot}>{rightElement ?? null}</View>
     </View>
   );
 }
@@ -99,9 +102,16 @@ const styles = StyleSheet.create({
   },
 
   sideSlot: {
-    width: 42,
+    minWidth: 42,
     height: 42,
     alignItems: "flex-start",
+    justifyContent: "center",
+  },
+
+  rightSlot: {
+    minWidth: 42,
+    height: 42,
+    alignItems: "flex-end",
     justifyContent: "center",
   },
 

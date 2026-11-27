@@ -1,23 +1,14 @@
 import * as Haptics from "expo-haptics";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   Platform,
   Pressable,
   StyleSheet,
   Text,
-  View,
   type ViewStyle,
 } from "react-native";
-import Animated, {
-  cancelAnimation,
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
-} from "react-native-reanimated";
 
+import { Spinner } from "@/components/ui/Spinner";
 import { useTheme } from "@/hooks/use-theme";
 
 interface AppButtonProps {
@@ -42,39 +33,40 @@ export function AppButton({
   style,
 }: AppButtonProps) {
   const theme = useTheme();
-  const shimmer = useSharedValue(0.45);
+  const [internalLoading, setInternalLoading] = useState(false);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
-    if (loading) {
-      shimmer.value = withRepeat(
-        withSequence(
-          withTiming(1, { duration: 650, easing: Easing.inOut(Easing.ease) }),
-          withTiming(0.38, {
-            duration: 650,
-            easing: Easing.inOut(Easing.ease),
-          }),
-        ),
-        -1,
-        false,
-      );
-    } else {
-      cancelAnimation(shimmer);
-      shimmer.value = 1;
-    }
-  }, [loading, shimmer]);
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
-  const skeletonBarStyle = useAnimatedStyle(() => ({
-    opacity: shimmer.value,
-  }));
+  const isBusy = loading || internalLoading;
 
-  const handlePress = async () => {
-    if (disabled || loading) return;
+  const handlePress = () => {
+    if (disabled || isBusy) return;
 
     if (haptic && Platform.OS !== "web") {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
 
-    await onPress();
+    try {
+      const result = onPress();
+      if (result && typeof (result as Promise<void>).then === "function") {
+        setInternalLoading(true);
+        void (result as Promise<void>).finally(() => {
+          if (isMountedRef.current) {
+            setInternalLoading(false);
+          }
+        });
+      }
+    } catch {
+      if (isMountedRef.current) {
+        setInternalLoading(false);
+      }
+    }
   };
 
   const backgroundColor =
@@ -86,14 +78,9 @@ export function AppButton({
   const textColor =
     variant === "primary" ? theme.onPrimary : theme.primary;
 
-  const skeletonFill =
-    variant === "primary"
-      ? "rgba(255, 255, 255, 0.55)"
-      : "rgba(240, 104, 8, 0.35)";
-
   return (
     <Pressable
-      disabled={disabled || loading}
+      disabled={disabled || isBusy}
       onPress={handlePress}
       style={({ pressed }) => [
         styles.button,
@@ -105,26 +92,22 @@ export function AppButton({
           borderColor,
         },
         variant === "secondary" && styles.secondaryBorder,
-        pressed && !disabled && !loading && styles.pressed,
-        disabled && !loading && styles.disabled,
-        loading && styles.loadingState,
+        pressed && !disabled && !isBusy && styles.pressed,
+        disabled && !isBusy && styles.disabled,
+        isBusy && styles.loadingState,
         style,
       ]}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: disabled || isBusy, busy: isBusy }}
     >
-      {loading ? (
-        <View style={styles.skeletonRow}>
-          <Animated.View
-            style={[
-              styles.skeletonBar,
-              { backgroundColor: skeletonFill },
-              skeletonBarStyle,
-            ]}
-          />
-        </View>
+      {isBusy ? (
+        <Spinner size={22} strokeWidth={2.6} color={textColor} />
       ) : (
         <>
           {icon}
-          <Text style={[styles.text, { color: textColor }]}>{title}</Text>
+          <Text style={[styles.text, { color: textColor }]} numberOfLines={1}>
+            {title}
+          </Text>
         </>
       )}
     </Pressable>
@@ -156,19 +139,7 @@ const styles = StyleSheet.create({
   },
 
   loadingState: {
-    opacity: 0.88,
-  },
-
-  skeletonRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  skeletonBar: {
-    width: 112,
-    height: 12,
-    borderRadius: 999,
+    opacity: 0.92,
   },
 
   text: {

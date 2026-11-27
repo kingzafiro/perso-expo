@@ -57,8 +57,14 @@
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "ios:prebuild": "bash ./scripts/build-ios-local.sh --prebuild",
+    "ios:build": "bash ./scripts/build-ios-local.sh --simulator",
+    "ios:build:device": "bash ./scripts/build-ios-local.sh --device",
+    "ios:build:release": "bash ./scripts/build-ios-local.sh --release",
+    "ios:xcode": "bash ./scripts/build-ios-local.sh --xcode",
+    "ios:eas:local": "bash ./scripts/build-ios-local.sh --eas-sim",
     "web": "expo start --web",
     "lint": "expo lint"
   },

@@ -2,11 +2,13 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import {
   Bell,
+  Bookmark,
   ChevronRight,
   FileCheck2,
   FileText,
   LogOut,
   Palette,
+  QrCode,
   ShieldCheck,
   UserCog,
 } from "lucide-react-native";
@@ -22,7 +24,11 @@ import {
 } from "react-native";
 
 import { EmployerSettingsGroup } from "@/features/employer/components/EmployerSettingsGroup";
-import { useMyDocumentRequests } from "@/features/jobs/hooks/use-jobs";
+import { useMyInterviews } from "@/features/employer/hooks/use-interviews";
+import {
+  useFavoriteVacancies,
+  useMyDocumentRequests,
+} from "@/features/jobs/hooks/use-jobs";
 import { ProfileAvatar } from "@/features/profile/components/ProfileAvatar";
 import { SettingsGroup, SettingsRow } from "@/features/settings/components/SettingsGroup";
 import { SettingsHeader } from "@/features/settings/components/SettingsHeader";
@@ -67,8 +73,13 @@ export default function TuScreen() {
     (state) => state.syncFromServer,
   );
   const { data: docRequests = [] } = useMyDocumentRequests();
+  const { data: favoriteVacancies = [] } = useFavoriteVacancies();
+  const { data: myInterviews = [] } = useMyInterviews();
   const pendingDocRequestsCount = docRequests.filter(
     (r) => r.estado === "pendiente",
+  ).length;
+  const activeInterviewsCount = myInterviews.filter(
+    (i) => i.estado === "pendiente",
   ).length;
 
   useEffect(() => {
@@ -177,6 +188,34 @@ export default function TuScreen() {
             iconBgColor={theme.primary}
             showDivider
             onPress={() => router.push("/(app)/tu/documentos")}
+          />
+
+          <SettingsRow
+            title="Mis favoritos"
+            subtitle="Empleos guardados para postularte después"
+            value={
+              favoriteVacancies.length > 0
+                ? `${favoriteVacancies.length}`
+                : undefined
+            }
+            icon={<Bookmark size={18} color="#FFFFFF" />}
+            iconBgColor="#FF9500"
+            showDivider
+            onPress={() => router.push("/(app)/tu/favoritos")}
+          />
+
+          <SettingsRow
+            title="Mis entrevistas"
+            subtitle="Ubicación de oficinas y pases QR de acceso"
+            value={
+              activeInterviewsCount > 0
+                ? `${activeInterviewsCount} activa${activeInterviewsCount === 1 ? "" : "s"}`
+                : undefined
+            }
+            icon={<QrCode size={18} color="#FFFFFF" />}
+            iconBgColor="#AF52DE"
+            showDivider
+            onPress={() => router.push("/(app)/tu/entrevistas")}
           />
 
           <SettingsRow
