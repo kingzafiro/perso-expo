@@ -49,6 +49,32 @@ export interface DocumentAccessRequest {
   } | null;
 }
 
+export interface ApplicantTravelModeEstimate {
+  minutos: number;
+  texto: string;
+  estimado: boolean;
+}
+
+export interface ApplicantCommuteInfo {
+  candidato: {
+    lat: number;
+    lng: number;
+    etiqueta: string;
+  };
+  empresa: {
+    lat: number;
+    lng: number;
+    etiqueta: string;
+  };
+  distancia_metros: number;
+  distancia_texto: string;
+  tiempos: {
+    carro: ApplicantTravelModeEstimate;
+    moto: ApplicantTravelModeEstimate;
+    transporte_publico: ApplicantTravelModeEstimate;
+  };
+}
+
 export interface ApplicantFullProfilePayload {
   postulacion: {
     id_postulacion: number;
@@ -77,6 +103,8 @@ export interface ApplicantFullProfilePayload {
       estado: string;
       colonia: string;
       cp: string;
+      latitud?: number | null;
+      longitud?: number | null;
     } | null;
     informacion: {
       universidad: string;
@@ -108,4 +136,5 @@ export interface ApplicantFullProfilePayload {
   documentos: ApplicantDocumentItem[];
   solicitudes: DocumentAccessRequest[];
   entrevista_activa?: InterviewPass | null;
+  ubicacion_traslado?: ApplicantCommuteInfo | null;
 }

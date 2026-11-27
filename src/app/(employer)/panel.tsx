@@ -30,7 +30,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppButton } from "@/components/ui/AppButton";
 import { useBilling } from "@/features/billing/hooks/use-billing";
 import type { CreateVacancyInput } from "@/features/employer/api/employer.api";
-import { AdminOverviewCard } from "@/features/employer/components/AdminOverviewCard";
 import { CreateVacancyModal } from "@/features/employer/components/CreateVacancyModal";
 import { EmployerInterviewsModal } from "@/features/employer/components/EmployerInterviewsModal";
 import { SubscriptionStatusCard } from "@/features/employer/components/SubscriptionStatusCard";
@@ -330,9 +329,7 @@ export default function EmployerPanelScreen() {
           />
         }
       >
-        {isAdmin ? (
-          <AdminOverviewCard />
-        ) : subscription ? (
+        {!isAdmin && subscription ? (
           <SubscriptionStatusCard
             subscription={subscription}
             limits={limits}

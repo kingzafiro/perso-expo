@@ -1,7 +1,15 @@
-import { KeyRound, Mail, ShieldAlert, Trash2 } from "lucide-react-native";
-import { Alert, ScrollView, StyleSheet, View } from "react-native";
+import {
+  FingerprintPattern,
+  KeyRound,
+  Mail,
+  ScanFace,
+  ShieldAlert,
+  Trash2,
+} from "lucide-react-native";
+import { Alert, ScrollView, StyleSheet, Switch, View } from "react-native";
 
 import { forgotPassword } from "@/features/auth/api/forgot-password";
+import { useBiometricToggle } from "@/features/auth/hooks/use-biometric-login";
 import {
   SettingsGroup,
   SettingsRow,
@@ -15,8 +23,14 @@ export default function CuentaScreen() {
   const isDark = useColorScheme() === "dark";
   const theme = useTheme();
   const user = useAuthStore((state) => state.user);
+  const {
+    status: biometricStatus,
+    isToggling: togglingBiometrics,
+    toggleBiometrics,
+  } = useBiometricToggle();
 
   const screenBg = isDark ? "#000000" : "#F5F2EF";
+  const trackFalse = isDark ? "#3A3633" : "#D6D1CC";
 
   const handleChangeEmail = () => {
     Alert.alert(
@@ -82,6 +96,19 @@ export default function CuentaScreen() {
     );
   };
 
+  const biometricSubtitle = biometricStatus.isEnabled
+    ? `Activo para ${biometricStatus.savedAccount?.email ?? user?.email ?? "tu cuenta"}`
+    : biometricStatus.isEnrolled
+      ? "Inicia sesión sin escribir tu contraseña"
+      : `Configura ${biometricStatus.label} en los ajustes del dispositivo`;
+
+  const biometricIcon =
+    biometricStatus.kind === "face-id" ? (
+      <ScanFace size={18} color="#FFFFFF" />
+    ) : (
+      <FingerprintPattern size={18} color="#FFFFFF" />
+    );
+
   return (
     <View style={[styles.screen, { backgroundColor: screenBg }]}>
       <SettingsHeader title="Configuración de la cuenta" />
@@ -114,15 +141,41 @@ export default function CuentaScreen() {
             onPress={handleChangePassword}
           />
 
+          {biometricStatus.isSupported && (
+            <SettingsRow
+              title={`Inicio con ${biometricStatus.label}`}
+              subtitle={biometricSubtitle}
+              icon={biometricIcon}
+              iconBgColor="#5856D6"
+              showDivider
+              showChevron={false}
+              rightElement={
+                <Switch
+                  value={biometricStatus.isEnabled}
+                  disabled={togglingBiometrics}
+                  onValueChange={toggleBiometrics}
+                  trackColor={{ false: trackFalse, true: theme.primary }}
+                  thumbColor="#FFFFFF"
+                />
+              }
+            />
+          )}
+
           <SettingsRow
             title="Seguridad y accesos"
-            subtitle="Correo, Apple y Google"
+            subtitle={
+              biometricStatus.isSupported
+                ? `Correo, ${biometricStatus.label}, Apple y Google`
+                : "Correo, Apple y Google"
+            }
             icon={<ShieldAlert size={18} color="#FFFFFF" />}
             iconBgColor="#0A84FF"
             onPress={() =>
               Alert.alert(
                 "Métodos de acceso",
-                "Tu cuenta admite acceso mediante correo electrónico, Apple y Google vinculados al mismo correo.",
+                biometricStatus.isSupported
+                  ? `Tu cuenta admite acceso mediante correo electrónico, ${biometricStatus.label}, Apple y Google.`
+                  : "Tu cuenta admite acceso mediante correo electrónico, Apple y Google vinculados al mismo correo.",
               )
             }
           />

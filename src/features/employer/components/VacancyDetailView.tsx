@@ -2,7 +2,6 @@ import {
   Award,
   BadgeCheck,
   Briefcase,
-  Building2,
   CheckCircle2,
   Clock,
   Flag,
@@ -17,9 +16,11 @@ import { AppButton } from "@/components/ui/AppButton";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 
+import { CompanyLogo } from "./CompanyLogo";
 import {
   formatVacancyLocation,
   formatVacancySalary,
+  formatVacancySchedule,
   VACANCY_CONTRACTS,
   VACANCY_MODALITIES,
   type EmployerVacancy,
@@ -98,22 +99,32 @@ export function VacancyDetailView({
           {vacancy.titulo}
         </Text>
 
-        <View style={styles.companyRow}>
-          <Building2 size={15} color={theme.primary} />
-          <Text style={[styles.companyName, { color: theme.text }]}>
-            {companyName}
-          </Text>
-          {vacancy.empresa?.verificada ? (
-            <View style={styles.verifiedBadge}>
-              <BadgeCheck size={14} color="#34C759" />
-              <Text style={styles.verifiedText}>Verificada</Text>
+        <View style={styles.companyHeaderRow}>
+          <CompanyLogo
+            uri={vacancy.empresa?.logo_url}
+            size={50}
+            borderRadius={14}
+          />
+          <View style={styles.companyHeaderInfo}>
+            <View style={styles.companyRow}>
+              <Text
+                style={[styles.companyName, { color: theme.text }]}
+                numberOfLines={1}
+              >
+                {companyName}
+              </Text>
+              {vacancy.empresa?.verificada ? (
+                <View style={styles.verifiedBadge}>
+                  <BadgeCheck size={14} color="#34C759" />
+                  <Text style={styles.verifiedText}>Verificada</Text>
+                </View>
+              ) : null}
             </View>
-          ) : null}
+            <Text style={[styles.metaSummary, { color: theme.textSecondary }]}>
+              {locationText} · {modalityLabel}
+            </Text>
+          </View>
         </View>
-
-        <Text style={[styles.metaSummary, { color: theme.textSecondary }]}>
-          {locationText} · {modalityLabel}
-        </Text>
 
         <View
           style={[styles.salaryBanner, { backgroundColor: theme.primarySoft }]}
@@ -199,7 +210,7 @@ export function VacancyDetailView({
                 Horario
               </Text>
               <Text style={[styles.detailValue, { color: theme.text }]}>
-                {vacancy.horario}
+                {formatVacancySchedule(vacancy.horario)}
               </Text>
             </View>
           </View>
@@ -399,6 +410,17 @@ const styles = StyleSheet.create({
     letterSpacing: -0.45,
   },
 
+  companyHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  companyHeaderInfo: {
+    flex: 1,
+    gap: 3,
+  },
+
   companyRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -409,6 +431,7 @@ const styles = StyleSheet.create({
   companyName: {
     fontSize: 15,
     fontWeight: "700",
+    flexShrink: 1,
   },
 
   verifiedBadge: {

@@ -3,13 +3,21 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { Building2, ShieldCheck } from "lucide-react-native";
 import { useState } from "react";
-import { Alert, Platform, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppButton } from "@/components/ui/AppButton";
-import { AuthSheetLayout } from "@/features/auth/components/AuthSheetLayout";
 import { useBilling } from "@/features/billing/hooks/use-billing";
 import { getStoreProductId } from "@/features/billing/lib/revenuecat-client";
 import { BillingCycleToggle } from "@/features/employer/components/BillingCycleToggle";
+import { CompanyLogo } from "@/features/employer/components/CompanyLogo";
 import { PlanCard } from "@/features/employer/components/PlanCard";
 import { SubscriptionComplianceFooter } from "@/features/employer/components/SubscriptionComplianceFooter";
 import { TrialHighlightBanner } from "@/features/employer/components/TrialHighlightBanner";
@@ -18,6 +26,8 @@ import {
   type BillingCycle,
   type EmployerPlanId,
 } from "@/features/employer/types/employer.types";
+import { SettingsHeader } from "@/features/settings/components/SettingsHeader";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 import { useEmployerStore } from "@/stores/employer.store";
 
@@ -30,7 +40,10 @@ function extractErrorMessage(error: unknown, fallback: string) {
 }
 
 export default function EmployerPlansScreen() {
+  const isDark = useColorScheme() === "dark";
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
+
   const draft = useEmployerStore((state) => state.draft);
   const existingProfile = useEmployerStore((state) => state.profile);
   const subscription = useEmployerStore((state) => state.subscription);
@@ -45,11 +58,7 @@ export default function EmployerPlansScreen() {
     (state) => state.activateSandboxTrial,
   );
 
-  const {
-    packagesByProductId,
-    purchasePlan,
-    restorePurchases,
-  } = useBilling();
+  const { packagesByProductId, purchasePlan, restorePurchases } = useBilling();
 
   const [billingCycle, setBillingCycle] = useState<BillingCycle>(
     subscription?.billingCycle ?? "monthly",
@@ -69,6 +78,12 @@ export default function EmployerPlansScreen() {
 
   const companyName =
     existingProfile?.companyName || draft.companyName || "tu empresa";
+
+  const screenBg = isDark ? "#000000" : "#F5F2EF";
+  const cardBg = isDark ? "#181513" : "#FFFFFF";
+  const cardBorder = isDark
+    ? "rgba(255, 255, 255, 0.08)"
+    : "rgba(23, 18, 14, 0.08)";
 
   const exitToHome = () => {
     if (router.canDismiss()) {
@@ -96,7 +111,7 @@ export default function EmployerPlansScreen() {
           Haptics.NotificationFeedbackType.Success,
         );
       }
-      router.replace("/(employer)/panel");
+      router.replace("/(app)/empresas");
     } catch (error) {
       Alert.alert(
         "No se pudo activar la prueba",
@@ -138,7 +153,7 @@ export default function EmployerPlansScreen() {
           );
         }
 
-        router.replace("/(employer)/panel");
+        router.replace("/(app)/empresas");
         return;
       }
 
@@ -150,7 +165,7 @@ export default function EmployerPlansScreen() {
 
         Alert.alert(
           "Modo prueba local (Expo Go)",
-          `Las compras reales de App Store y Google Play se procesarán con RevenueCat al compilar tu Development Build.\n\n¿Deseas activar ahora la prueba gratis de 14 días en modo desarrollo para explorar el Panel de Empleador?`,
+          "Las compras reales de App Store y Google Play se procesarán con RevenueCat al compilar tu Development Build.\n\n¿Deseas activar ahora la prueba gratis de 14 días en modo desarrollo para explorar Perso Empresas?",
           [
             { text: "Cancelar", style: "cancel" },
             {
@@ -198,8 +213,8 @@ export default function EmployerPlansScreen() {
         });
         Alert.alert("Compras restauradas", outcome.message, [
           {
-            text: "Ir al panel",
-            onPress: () => router.replace("/(employer)/panel"),
+            text: "Ir a Empresas",
+            onPress: () => router.replace("/(app)/empresas"),
           },
         ]);
         return;
@@ -229,32 +244,34 @@ export default function EmployerPlansScreen() {
   };
 
   return (
-    <AuthSheetLayout
-      title="Activa Perso Empresas"
-      subtitle={`Comienza con 14 días gratis para ${companyName}.`}
-      showBackButton
-      stepIndicator={{ current: 4, total: 4 }}
-    >
-      <View style={styles.container}>
+    <View style={[styles.screen, { backgroundColor: screenBg }]}>
+      <SettingsHeader title="Planes y suscripción" />
+
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: Math.max(insets.bottom + 36, 56) },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <TrialHighlightBanner trialDays={selectedPlan.trialDays} />
 
         <View
           style={[
             styles.companySummary,
             {
-              backgroundColor: theme.inputBackground,
-              borderColor: theme.inputBorder,
+              backgroundColor: cardBg,
+              borderColor: cardBorder,
             },
           ]}
         >
-          <View
-            style={[
-              styles.companyIcon,
-              { backgroundColor: theme.primarySoft },
-            ]}
-          >
-            <Building2 size={18} color={theme.primary} />
-          </View>
+          <CompanyLogo
+            uri={existingProfile?.logoUrl}
+            size={40}
+            borderRadius={12}
+          />
           <View style={styles.flexOne}>
             <Text
               style={[styles.companyName, { color: theme.text }]}
@@ -271,7 +288,7 @@ export default function EmployerPlansScreen() {
                 existingProfile?.city || draft.city,
               ]
                 .filter(Boolean)
-                .join(" · ") || "Perfil de empleador listo"}
+                .join(" · ") || "Perfil de empresa listo"}
             </Text>
           </View>
           <ShieldCheck size={18} color={theme.success} />
@@ -314,21 +331,30 @@ export default function EmployerPlansScreen() {
             onSaveForLater={handleSaveForLater}
           />
         </View>
-      </View>
-    </AuthSheetLayout>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    width: "100%",
+  screen: {
+    flex: 1,
+  },
+
+  scroll: {
+    flex: 1,
+  },
+
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
     gap: 14,
   },
 
   companySummary: {
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 12,
+    padding: 13,
     flexDirection: "row",
     alignItems: "center",
     gap: 11,

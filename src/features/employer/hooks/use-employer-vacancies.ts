@@ -18,6 +18,8 @@ import type { ApplicationStatus, VacancyStatus } from "../types/employer.types";
 
 export const EMPLOYER_VACANCIES_QUERY_KEY = ["employer", "vacancies"] as const;
 export const PUBLIC_JOBS_QUERY_KEY = ["public", "vacancies"] as const;
+const CANDIDATE_FAVORITES_QUERY_KEY = ["candidate", "favorite-vacancies"] as const;
+const CANDIDATE_APPLICATIONS_QUERY_KEY = ["candidate", "applications"] as const;
 
 export function useEmployerVacancies(enabled: boolean) {
   return useQuery({
@@ -58,6 +60,8 @@ export function useUpdateEmployerVacancy() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: EMPLOYER_VACANCIES_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: PUBLIC_JOBS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: CANDIDATE_FAVORITES_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: CANDIDATE_APPLICATIONS_QUERY_KEY }),
       ]);
     },
   });
@@ -73,6 +77,8 @@ export function useDeleteEmployerVacancy() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: EMPLOYER_VACANCIES_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: PUBLIC_JOBS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: CANDIDATE_FAVORITES_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: CANDIDATE_APPLICATIONS_QUERY_KEY }),
         syncFromServer(),
       ]);
     },
@@ -95,6 +101,8 @@ export function useUpdateEmployerVacancyStatus() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: EMPLOYER_VACANCIES_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: PUBLIC_JOBS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: CANDIDATE_FAVORITES_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: CANDIDATE_APPLICATIONS_QUERY_KEY }),
         syncFromServer(),
       ]);
     },

@@ -9,7 +9,6 @@ export default function EmployerLayout() {
       }}
     >
       <Stack.Screen name="index" />
-      <Stack.Screen name="contacto" />
       <Stack.Screen name="verificacion" />
       <Stack.Screen name="planes" />
       <Stack.Screen name="panel" />

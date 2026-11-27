@@ -2,6 +2,7 @@ import * as Haptics from "expo-haptics";
 import { Check, ChevronDown, X } from "lucide-react-native";
 import { useState } from "react";
 import {
+  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -28,6 +29,8 @@ interface AppSelectFieldProps<T extends string = string> {
   error?: string;
   onChange: (value: T) => void;
   modalTitle?: string;
+  /** Usa una lista desplegable en línea (ideal dentro de Modals/BottomSheets en iOS) */
+  inline?: boolean;
 }
 
 export function AppSelectField<T extends string = string>({
@@ -38,6 +41,7 @@ export function AppSelectField<T extends string = string>({
   error,
   onChange,
   modalTitle,
+  inline = false,
 }: AppSelectFieldProps<T>) {
   const isDark = useColorScheme() === "dark";
   const theme = useTheme();
@@ -54,6 +58,45 @@ export function AppSelectField<T extends string = string>({
     setOpen(false);
   };
 
+  const renderOptions = () =>
+    options.map((opt, idx) => {
+      const isSelected = opt.value === value;
+      return (
+        <Pressable
+          key={opt.value}
+          onPress={() => handleSelect(opt.value)}
+          style={({ pressed }) => [
+            styles.optionRow,
+            idx < options.length - 1 && {
+              borderBottomWidth: StyleSheet.hairlineWidth,
+              borderBottomColor: theme.inputBorder,
+            },
+            isSelected && { backgroundColor: theme.primarySoft },
+            pressed && styles.pressed,
+          ]}
+        >
+          <View style={styles.optionTextWrap}>
+            <Text
+              style={[
+                styles.optionLabel,
+                { color: isSelected ? theme.primary : theme.text },
+              ]}
+            >
+              {opt.label}
+            </Text>
+            {opt.description ? (
+              <Text
+                style={[styles.optionDesc, { color: theme.textSecondary }]}
+              >
+                {opt.description}
+              </Text>
+            ) : null}
+          </View>
+          {isSelected ? <Check size={17} color={theme.primary} /> : null}
+        </Pressable>
+      );
+    });
+
   return (
     <View style={styles.wrapper}>
       <Text style={[styles.label, { color: theme.textSecondary }]}>
@@ -62,16 +105,21 @@ export function AppSelectField<T extends string = string>({
 
       <Pressable
         onPress={() => {
+          Keyboard.dismiss();
           if (Platform.OS !== "web") {
             void Haptics.selectionAsync();
           }
-          setOpen(true);
+          setOpen((prev) => (inline ? !prev : true));
         }}
         style={({ pressed }) => [
           styles.trigger,
           {
             backgroundColor: theme.inputBackground,
-            borderColor: error ? theme.error : theme.inputBorder,
+            borderColor: error
+              ? theme.error
+              : inline && open
+                ? theme.primary
+                : theme.inputBorder,
           },
           pressed && styles.pressed,
         ]}
@@ -85,100 +133,86 @@ export function AppSelectField<T extends string = string>({
         >
           {selectedOption ? selectedOption.label : placeholder}
         </Text>
-        <ChevronDown size={17} color={theme.textSecondary} />
+        <ChevronDown
+          size={17}
+          color={theme.textSecondary}
+          style={inline && open ? styles.chevronRotated : undefined}
+        />
       </Pressable>
 
       {error ? (
         <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text>
       ) : null}
 
-      <Modal
-        visible={open}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setOpen(false)}
-      >
-        <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
-          <Pressable
-            onPress={() => {}}
+      {inline ? (
+        open ? (
+          <View
             style={[
-              styles.sheet,
+              styles.inlineDropdown,
               {
-                backgroundColor: sheetBg,
+                backgroundColor: theme.backgroundElement,
                 borderColor: theme.inputBorder,
               },
             ]}
           >
-            <View
-              style={[
-                styles.sheetHeader,
-                { borderBottomColor: theme.inputBorder },
-              ]}
-            >
-              <Text style={[styles.sheetTitle, { color: theme.text }]}>
-                {modalTitle ?? label}
-              </Text>
-              <Pressable
-                onPress={() => setOpen(false)}
-                style={[
-                  styles.closeBtn,
-                  { backgroundColor: theme.inputBackground },
-                ]}
-              >
-                <X size={16} color={theme.text} />
-              </Pressable>
-            </View>
-
             <ScrollView
-              style={styles.optionsList}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+              style={styles.inlineList}
               showsVerticalScrollIndicator={false}
             >
-              {options.map((opt, idx) => {
-                const isSelected = opt.value === value;
-                return (
-                  <Pressable
-                    key={opt.value}
-                    onPress={() => handleSelect(opt.value)}
-                    style={({ pressed }) => [
-                      styles.optionRow,
-                      idx < options.length - 1 && {
-                        borderBottomWidth: StyleSheet.hairlineWidth,
-                        borderBottomColor: theme.inputBorder,
-                      },
-                      isSelected && { backgroundColor: theme.primarySoft },
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <View style={styles.optionTextWrap}>
-                      <Text
-                        style={[
-                          styles.optionLabel,
-                          { color: isSelected ? theme.primary : theme.text },
-                        ]}
-                      >
-                        {opt.label}
-                      </Text>
-                      {opt.description ? (
-                        <Text
-                          style={[
-                            styles.optionDesc,
-                            { color: theme.textSecondary },
-                          ]}
-                        >
-                          {opt.description}
-                        </Text>
-                      ) : null}
-                    </View>
-                    {isSelected ? (
-                      <Check size={17} color={theme.primary} />
-                    ) : null}
-                  </Pressable>
-                );
-              })}
+              {renderOptions()}
             </ScrollView>
+          </View>
+        ) : null
+      ) : (
+        <Modal
+          visible={open}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setOpen(false)}
+        >
+          <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
+            <Pressable
+              onPress={() => {}}
+              style={[
+                styles.sheet,
+                {
+                  backgroundColor: sheetBg,
+                  borderColor: theme.inputBorder,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.sheetHeader,
+                  { borderBottomColor: theme.inputBorder },
+                ]}
+              >
+                <Text style={[styles.sheetTitle, { color: theme.text }]}>
+                  {modalTitle ?? label}
+                </Text>
+                <Pressable
+                  onPress={() => setOpen(false)}
+                  style={[
+                    styles.closeBtn,
+                    { backgroundColor: theme.inputBackground },
+                  ]}
+                >
+                  <X size={16} color={theme.text} />
+                </Pressable>
+              </View>
+
+              <ScrollView
+                style={styles.optionsList}
+                showsVerticalScrollIndicator={false}
+              >
+                {renderOptions()}
+              </ScrollView>
+            </Pressable>
           </Pressable>
-        </Pressable>
-      </Modal>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -209,6 +243,20 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: "500",
+  },
+
+  chevronRotated: {
+    transform: [{ rotate: "180deg" }],
+  },
+
+  inlineDropdown: {
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+
+  inlineList: {
+    maxHeight: 230,
   },
 
   errorText: {

@@ -6,6 +6,10 @@ import {
   AppSelectField,
   type SelectOption,
 } from "@/components/ui/AppSelectField";
+import {
+  formatTime12h,
+  formatVacancySchedule,
+} from "@/features/employer/types/employer.types";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -19,12 +23,24 @@ const DAY_PATTERNS: SelectOption[] = [
 ];
 
 const TIME_OPTIONS: SelectOption[] = Array.from({ length: 36 }, (_, idx) => {
-  const totalMinutes = 6 * 60 + idx * 30; // 06:00 a 23:30
+  const totalMinutes = 6 * 60 + idx * 30; // 6:00 AM a 11:30 PM
   const hours = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
   const minutes = String(totalMinutes % 60).padStart(2, "0");
   const value = `${hours}:${minutes}`;
-  return { value, label: `${value} hrs` };
+  return { value, label: formatTime12h(value) };
 });
+
+function to24hFromMatch(hourStr: string, minStr: string, meridiem?: string): string {
+  let h = Number(hourStr);
+  if (!Number.isFinite(h)) return "09:00";
+  const m = minStr.padStart(2, "0");
+  if (meridiem) {
+    const isPm = meridiem.toLowerCase().startsWith("p");
+    if (isPm && h < 12) h += 12;
+    if (!isPm && h === 12) h = 0;
+  }
+  return `${String(h).padStart(2, "0")}:${m}`;
+}
 
 function timeToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(":").map(Number);
@@ -43,7 +59,9 @@ function parseScheduleString(raw: string) {
     };
   }
 
-  const timeMatch = clean.match(/(\d{2}:\d{2})\s*a\s*(\d{2}:\d{2})/);
+  const timeMatch = clean.match(
+    /(\d{1,2}):(\d{2})\s*([ap]\.?\s*m\.?)?\s*(?:a|-|–)\s*(\d{1,2}):(\d{2})\s*([ap]\.?\s*m\.?)?/i,
+  );
   const matchedDay = DAY_PATTERNS.find((p) =>
     clean.toLowerCase().startsWith(p.value.toLowerCase()),
   );
@@ -51,8 +69,12 @@ function parseScheduleString(raw: string) {
   return {
     enabled: true,
     days: matchedDay?.value ?? "Lunes a viernes",
-    startTime: timeMatch?.[1] ?? "09:00",
-    endTime: timeMatch?.[2] ?? "18:00",
+    startTime: timeMatch
+      ? to24hFromMatch(timeMatch[1], timeMatch[2], timeMatch[3])
+      : "09:00",
+    endTime: timeMatch
+      ? to24hFromMatch(timeMatch[4], timeMatch[5], timeMatch[6])
+      : "18:00",
   };
 }
 
@@ -138,7 +160,9 @@ export function SchedulePickerField({
       return;
     }
 
-    onChange(`${nextDays} · ${nextStart} a ${nextEnd}`);
+    onChange(
+      `${nextDays} · ${formatTime12h(nextStart)} a ${formatTime12h(nextEnd)}`,
+    );
   };
 
   const trackFalse = isDark ? "#3A3633" : "#D6D1CC";
@@ -163,7 +187,7 @@ export function SchedulePickerField({
             </Text>
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
               {enabled && value
-                ? value
+                ? formatVacancySchedule(value)
                 : "Activa para definir días y horario de la jornada"}
             </Text>
           </View>

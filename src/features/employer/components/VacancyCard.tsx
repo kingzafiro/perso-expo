@@ -18,6 +18,8 @@ import { ProfileAvatar } from "@/features/profile/components/ProfileAvatar";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 
+import { CompanyLogo } from "./CompanyLogo";
+
 import {
   formatVacancyLocation,
   formatVacancySalary,
@@ -114,6 +116,11 @@ export function VacancyCard({
       ]}
     >
       <View style={styles.headerRow}>
+        <CompanyLogo
+          uri={vacancy.empresa?.logo_url}
+          size={42}
+          borderRadius={12}
+        />
         <View style={styles.flexOne}>
           <Text
             style={[styles.title, { color: theme.text }]}

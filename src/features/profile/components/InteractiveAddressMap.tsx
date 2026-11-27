@@ -6,6 +6,7 @@ import { useTheme } from "@/hooks/use-theme";
 
 export function InteractiveAddressMap({
   coords,
+  distanceBadge,
   height = 170,
 }: InteractiveAddressMapProps) {
   const theme = useTheme();
@@ -23,7 +24,7 @@ export function InteractiveAddressMap({
     >
       <MapPin size={22} color={theme.primary} />
       <Text style={[styles.title, { color: theme.text }]}>
-        Vista de mapa interactivo
+        {distanceBadge ? `Distancia: ${distanceBadge}` : "Vista de mapa interactivo"}
       </Text>
       <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
         {coords

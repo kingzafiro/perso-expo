@@ -99,7 +99,8 @@ export function ApplyVacancyModal({
 
     const hasName = Boolean(user?.nombre?.trim());
     const phoneDigits = (user?.celular ?? "").replace(/\D/g, "");
-    const hasPhone = phoneDigits.length >= 8;
+    const hasPhoneDigits = phoneDigits.length >= 10;
+    const hasPhone = hasPhoneDigits && Boolean(user?.celular_verificado);
     const hasCv = Boolean(documents?.cv?.subido);
     const hasIne = Boolean(documents?.ine?.subido);
 
@@ -114,11 +115,11 @@ export function ApplyVacancyModal({
       },
       {
         id: "phone",
-        label: "Número de teléfono",
+        label: "Número de teléfono verificado",
         met: hasPhone,
-        routeLabel: "Tú → Ver perfil",
-        route: "/(app)/tu/perfil",
-        ctaLabel: "Agregar",
+        routeLabel: "Tú → Número de teléfono",
+        route: "/(app)/tu/telefono",
+        ctaLabel: hasPhoneDigits ? "Verificar" : "Agregar",
       },
       {
         id: "cv",

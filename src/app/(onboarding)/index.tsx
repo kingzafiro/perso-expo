@@ -8,6 +8,7 @@ import { z } from "zod";
 import { AppButton } from "@/components/ui/AppButton";
 import { FormInput } from "@/components/ui/FormInput";
 import { AuthSheetLayout } from "@/features/auth/components/AuthSheetLayout";
+import { useBiometricStatus } from "@/features/auth/hooks/use-biometric-login";
 import type { ApiErrorResponse } from "@/features/auth/types/auth.types";
 import { ProfileAvatar } from "@/features/profile/components/ProfileAvatar";
 import { useAvatarPicker } from "@/features/profile/hooks/use-avatar-picker";
@@ -41,6 +42,8 @@ function getPreviewInitials(nombre: string, apellido?: string) {
 export default function OnboardingPerfilScreen() {
   const theme = useTheme();
   const user = useAuthStore((state) => state.user);
+  const { status: biometricStatus } = useBiometricStatus();
+  const totalSteps = biometricStatus.isSupported ? 3 : 2;
   const updateProfileMutation = useUpdateProfile();
   const { currentPhotoUri, isBusy, photoError, openPhotoOptions } =
     useAvatarPicker();
@@ -81,7 +84,7 @@ export default function OnboardingPerfilScreen() {
     <AuthSheetLayout
       title="Configura tu perfil"
       subtitle="Agrega tu foto y dinos cómo te llamas para personalizar tu experiencia."
-      stepIndicator={{ current: 1, total: 2 }}
+      stepIndicator={{ current: 1, total: totalSteps }}
     >
       <View style={styles.container}>
         {/* Avatar interactivo con icono de cámara */}

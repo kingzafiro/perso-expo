@@ -1,10 +1,21 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AxiosError } from "axios";
+import * as DocumentPicker from "expo-document-picker";
 import * as Haptics from "expo-haptics";
-import { Calendar, ChevronDown, Clock, Trash2 } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import * as WebBrowser from "expo-web-browser";
+import {
+  Calendar,
+  ChevronDown,
+  Clock,
+  ExternalLink,
+  FileCheck2,
+  Trash2,
+  Upload,
+} from "lucide-react-native";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import {
+  ActivityIndicator,
   Alert,
   Keyboard,
   Platform,
@@ -20,6 +31,10 @@ import { z } from "zod";
 import { AppButton } from "@/components/ui/AppButton";
 import { FormInput } from "@/components/ui/FormInput";
 import type { ApiErrorResponse } from "@/features/auth/types/auth.types";
+import {
+  useDocumentMutations,
+  useUserDocuments,
+} from "@/features/documents/hooks/use-documents";
 import {
   ENGLISH_LEVELS,
   SUGGESTED_JOB_INTERESTS,
@@ -54,14 +69,6 @@ const personalSchema = z.object({
   nombre: z.string().trim().min(2, "Ingresa al menos 2 caracteres"),
   apellido_paterno: z.string().trim().optional(),
   apellido_materno: z.string().trim().optional(),
-  celular: z
-    .string()
-    .trim()
-    .refine(
-      (v) => v.length === 0 || /^\d{10,15}$/.test(v),
-      "Ingresa un número válido (10 a 15 dígitos)",
-    )
-    .optional(),
 });
 
 type PersonalForm = z.infer<typeof personalSchema>;
@@ -80,7 +87,6 @@ export function PersonalInfoEditor({
   const initialNombre = (user?.nombre ?? "").trim();
   const initialApellidoP = (user?.apellido_paterno ?? "").trim();
   const initialApellidoM = (user?.apellido_materno ?? "").trim();
-  const initialCelular = (user?.celular ?? "").trim();
 
   const { control, handleSubmit, watch } = useForm<PersonalForm>({
     resolver: zodResolver(personalSchema),
@@ -88,7 +94,6 @@ export function PersonalInfoEditor({
       nombre: user?.nombre ?? "",
       apellido_paterno: user?.apellido_paterno ?? "",
       apellido_materno: user?.apellido_materno ?? "",
-      celular: user?.celular ?? "",
     },
   });
 
@@ -96,8 +101,7 @@ export function PersonalInfoEditor({
   const hasChanges =
     (values.nombre ?? "").trim() !== initialNombre ||
     (values.apellido_paterno ?? "").trim() !== initialApellidoP ||
-    (values.apellido_materno ?? "").trim() !== initialApellidoM ||
-    (values.celular ?? "").trim() !== initialCelular;
+    (values.apellido_materno ?? "").trim() !== initialApellidoM;
 
   return (
     <View style={styles.form}>
@@ -121,15 +125,6 @@ export function PersonalInfoEditor({
         label="Apellido materno"
         placeholder="Ej. López"
         autoCapitalize="words"
-      />
-      <FormInput
-        control={control}
-        name="celular"
-        label="Celular (opcional)"
-        placeholder="10 dígitos"
-        keyboardType="phone-pad"
-        maxLength={15}
-        transformText={(text) => text.replace(/\D/g, "")}
       />
 
       <ErrorBanner
@@ -306,18 +301,165 @@ export function EnglishEditor({
 }) {
   const isDark = useColorScheme() === "dark";
   const theme = useTheme();
+  const documentsQuery = useUserDocuments();
+  const { upload: uploadDocument } = useDocumentMutations();
+
   const initialCode = initialValue?.inglesCodigo || "";
   const initialCert = Boolean(initialValue?.certificado);
 
   const [selectedCode, setSelectedCode] = useState(initialCode);
   const [certificado, setCertificado] = useState(initialCert);
+  const [certError, setCertError] = useState<string | null>(null);
+  const [uploadedLocally, setUploadedLocally] = useState(false);
+  const [uploadedDocUrl, setUploadedDocUrl] = useState<string | null>(null);
+
+  const englishDoc = documentsQuery.data?.ingles ?? null;
+  const isCheckingDoc = documentsQuery.isLoading && !documentsQuery.data;
+  const isUploadingCert = uploadDocument.isPending;
+  const certificateReady = uploadedLocally || Boolean(englishDoc?.subido);
+  const certificateUrl = uploadedDocUrl || englishDoc?.url || null;
+
+  useEffect(() => {
+    if (
+      documentsQuery.data &&
+      !documentsQuery.data.ingles?.subido &&
+      !uploadedLocally &&
+      certificado
+    ) {
+      setCertificado(false);
+    }
+  }, [documentsQuery.data, uploadedLocally, certificado]);
 
   const trackFalse = isDark ? "#3A3633" : "#D6D1CC";
+  const canSaveCertificado = !certificado || certificateReady;
   const hasChanges =
     selectedCode.length > 0 &&
+    canSaveCertificado &&
     (selectedCode !== initialCode || certificado !== initialCert);
 
+  const pickAndUploadCertificate = async (activateOnSuccess: boolean) => {
+    if (isUploadingCert) return;
+    setCertError(null);
+
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "application/pdf",
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+
+      if (result.canceled || !result.assets?.[0]) {
+        if (activateOnSuccess) {
+          setCertificado(false);
+          setCertError(
+            "Sube tu certificado de inglés en PDF para poder activar esta opción.",
+          );
+          if (Platform.OS !== "web") {
+            void Haptics.notificationAsync(
+              Haptics.NotificationFeedbackType.Warning,
+            );
+          }
+        }
+        return;
+      }
+
+      const asset = result.assets[0];
+      if (asset.size && asset.size > 8 * 1024 * 1024) {
+        if (activateOnSuccess) {
+          setCertificado(false);
+        }
+        setCertError("El PDF supera 8 MB. Elige una versión más ligera.");
+        return;
+      }
+
+      if (Platform.OS !== "web") {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+
+      const res = await uploadDocument.mutateAsync({
+        tipo: "ingles",
+        file: {
+          uri: asset.uri,
+          name: asset.name || "certificado-ingles.pdf",
+          mimeType: asset.mimeType || "application/pdf",
+        },
+      });
+
+      setUploadedLocally(true);
+      setUploadedDocUrl(res.documento?.url ?? null);
+      if (activateOnSuccess) {
+        setCertificado(true);
+      }
+      if (Platform.OS !== "web") {
+        void Haptics.notificationAsync(
+          Haptics.NotificationFeedbackType.Success,
+        );
+      }
+    } catch (uploadError) {
+      if (activateOnSuccess) {
+        setCertificado(false);
+      }
+      setCertError(
+        extractErrorMessage(
+          uploadError,
+          "No se pudo subir tu certificado de inglés. Intenta de nuevo.",
+        ),
+      );
+    }
+  };
+
+  const handleToggleCertificate = (nextValue: boolean) => {
+    setCertError(null);
+
+    if (!nextValue) {
+      if (Platform.OS !== "web") {
+        void Haptics.selectionAsync();
+      }
+      setCertificado(false);
+      return;
+    }
+
+    if (isCheckingDoc || isUploadingCert) {
+      return;
+    }
+
+    if (certificateReady) {
+      if (Platform.OS !== "web") {
+        void Haptics.selectionAsync();
+      }
+      setCertificado(true);
+      return;
+    }
+
+    void pickAndUploadCertificate(true);
+  };
+
+  const handleOpenCertificatePreview = async () => {
+    if (!certificateUrl) return;
+    if (Platform.OS !== "web") {
+      void Haptics.selectionAsync();
+    }
+    await WebBrowser.openBrowserAsync(certificateUrl);
+  };
+
+  const handleSubmitEnglish = () => {
+    if (certificado && !certificateReady) {
+      setCertificado(false);
+      setCertError(
+        "Debes subir tu certificado de inglés en PDF para activar esta opción.",
+      );
+      return;
+    }
+    onSave({ ingles: selectedCode, certificado });
+  };
+
   const rows = [ENGLISH_LEVELS.slice(0, 3), ENGLISH_LEVELS.slice(3, 6)];
+
+  const combinedErrorMessage =
+    certError ||
+    (error
+      ? extractErrorMessage(error, "No se pudo guardar tu nivel de inglés.")
+      : null);
 
   return (
     <View style={styles.form}>
@@ -372,7 +514,7 @@ export function EnglishEditor({
           styles.switchRow,
           {
             backgroundColor: theme.inputBackground,
-            borderColor: theme.inputBorder,
+            borderColor: certificado ? theme.primary : theme.inputBorder,
           },
         ]}
       >
@@ -381,30 +523,116 @@ export function EnglishEditor({
             ¿Cuentas con certificado?
           </Text>
           <Text style={[styles.switchSub, { color: theme.textSecondary }]}>
-            TOEFL, IELTS, Cambridge u otro aval oficial
+            {certificateReady
+              ? "TOEFL, IELTS, Cambridge u otro aval oficial"
+              : "Al activar se solicitará tu certificado en PDF (máx. 4 págs.)"}
           </Text>
         </View>
         <Switch
           value={certificado}
-          onValueChange={setCertificado}
+          disabled={isCheckingDoc || isUploadingCert || loading}
+          onValueChange={handleToggleCertificate}
           trackColor={{ false: trackFalse, true: theme.primary }}
           thumbColor="#FFFFFF"
         />
       </View>
 
-      <ErrorBanner
-        message={
-          error
-            ? extractErrorMessage(error, "No se pudo guardar tu nivel de inglés.")
-            : null
-        }
-      />
+      {isUploadingCert ? (
+        <View
+          style={[
+            styles.certStatusCard,
+            {
+              backgroundColor: theme.primarySoft,
+              borderColor: theme.primaryBorder,
+            },
+          ]}
+        >
+          <ActivityIndicator size="small" color={theme.primary} />
+          <View style={styles.flexOne}>
+            <Text style={[styles.certStatusTitle, { color: theme.text }]}>
+              Subiendo certificado de inglés...
+            </Text>
+            <Text
+              style={[styles.certStatusSub, { color: theme.textSecondary }]}
+            >
+              Validando y guardando tu archivo PDF
+            </Text>
+          </View>
+        </View>
+      ) : certificateReady ? (
+        <View
+          style={[
+            styles.certStatusCard,
+            {
+              backgroundColor: theme.backgroundElement,
+              borderColor: theme.inputBorder,
+            },
+          ]}
+        >
+          <Pressable
+            onPress={handleOpenCertificatePreview}
+            disabled={!certificateUrl}
+            style={({ pressed }) => [
+              styles.certInfoHit,
+              pressed && certificateUrl ? styles.pressed : undefined,
+            ]}
+          >
+            <View
+              style={[
+                styles.certIconBox,
+                { backgroundColor: theme.successSoft },
+              ]}
+            >
+              <FileCheck2 size={18} color={theme.success} />
+            </View>
+            <View style={styles.flexOne}>
+              <Text
+                style={[styles.certStatusTitle, { color: theme.text }]}
+                numberOfLines={1}
+              >
+                Certificado PDF cargado
+              </Text>
+              <Text
+                style={[styles.certStatusSub, { color: theme.textSecondary }]}
+                numberOfLines={1}
+              >
+                {certificateUrl
+                  ? "Toca para ver tu certificado"
+                  : "Guardado en Mis documentos"}
+              </Text>
+            </View>
+            {certificateUrl && (
+              <ExternalLink size={15} color={theme.textMuted} />
+            )}
+          </Pressable>
+
+          <Pressable
+            onPress={() => void pickAndUploadCertificate(false)}
+            disabled={isUploadingCert || loading}
+            style={({ pressed }) => [
+              styles.certReplaceBtn,
+              {
+                backgroundColor: theme.inputBackground,
+                borderColor: theme.inputBorder,
+              },
+              pressed && styles.pressed,
+            ]}
+          >
+            <Upload size={13} color={theme.primary} />
+            <Text style={[styles.certReplaceText, { color: theme.primary }]}>
+              Cambiar
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <ErrorBanner message={combinedErrorMessage} />
 
       <AppButton
         title="Guardar nivel de inglés"
         loading={loading}
-        disabled={!hasChanges}
-        onPress={() => onSave({ ingles: selectedCode, certificado })}
+        disabled={!hasChanges || isUploadingCert || isCheckingDoc}
+        onPress={handleSubmitEnglish}
       />
     </View>
   );
@@ -1197,6 +1425,56 @@ const styles = StyleSheet.create({
   switchSub: {
     fontSize: 12,
     marginTop: 2,
+  },
+
+  certStatusCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+
+  certInfoHit: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  certIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  certStatusTitle: {
+    fontSize: 13.5,
+    fontWeight: "700",
+  },
+
+  certStatusSub: {
+    fontSize: 12,
+    marginTop: 1,
+  },
+
+  certReplaceBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+
+  certReplaceText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
 
   tagCloud: {

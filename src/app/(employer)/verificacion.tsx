@@ -4,11 +4,20 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { BadgeCheck, FileText, Lock } from "lucide-react-native";
 import { useState } from "react";
-import { Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppButton } from "@/components/ui/AppButton";
-import { AuthSheetLayout } from "@/features/auth/components/AuthSheetLayout";
 import { EmployerVerificationCard } from "@/features/employer/components/EmployerVerificationCard";
+import { SettingsHeader } from "@/features/settings/components/SettingsHeader";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 import { useEmployerStore } from "@/stores/employer.store";
 
@@ -23,22 +32,24 @@ function extractErrorMessage(error: unknown, fallback: string) {
 const BENEFITS = [
   {
     icon: BadgeCheck,
-    text: "Insignia de Empresa Verificada en tus vacantes",
+    text: "Insignia de Empresa Verificada visible en tus vacantes",
   },
   {
     icon: FileText,
-    text: "Extracción automática de RFC y razón social con IA",
+    text: "Extracción automática de RFC y razón social desde tu PDF",
   },
   {
     icon: Lock,
-    text: "Documento privado, cifrado y usado solo para validar tu negocio",
+    text: "Documento privado, cifrado y usado únicamente para validar tu negocio",
   },
 ];
 
-export default function EmployerVerificationStepScreen() {
+export default function EmployerVerificationScreen() {
+  const isDark = useColorScheme() === "dark";
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const profile = useEmployerStore((state) => state.profile);
-  const hasAccess = useEmployerStore((state) => state.hasAccess);
+  const draft = useEmployerStore((state) => state.draft);
   const uploadVerificationPdf = useEmployerStore(
     (state) => state.uploadVerificationPdf,
   );
@@ -46,7 +57,18 @@ export default function EmployerVerificationStepScreen() {
   const [uploading, setUploading] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
 
-  const isVerified = Boolean(profile?.verified && profile?.rfc);
+  const isPreRegistration = !profile?.id_empresa;
+  const activeRfc = profile?.rfc || draft.rfc || "";
+  const activeLegalName = profile?.legalName || draft.legalName || "";
+  const isVerified = Boolean(
+    (profile?.verified && profile?.rfc) || (draft.verifiedPdf && draft.rfc),
+  );
+
+  const screenBg = isDark ? "#000000" : "#F5F2EF";
+  const cardBg = isDark ? "#181513" : "#FFFFFF";
+  const cardBorder = isDark
+    ? "rgba(255, 255, 255, 0.08)"
+    : "rgba(23, 18, 14, 0.08)";
 
   const handlePickAndVerifyPdf = async () => {
     if (uploading) return;
@@ -82,6 +104,18 @@ export default function EmployerVerificationStepScreen() {
       Alert.alert(
         "Empresa verificada",
         `RFC detectado: ${extraccion.rfc}\nRazón social: ${extraccion.razonSocial}`,
+        isPreRegistration
+          ? [
+              {
+                text: "Continuar",
+                onPress: () => {
+                  if (router.canGoBack()) {
+                    router.back();
+                  }
+                },
+              },
+            ]
+          : undefined,
       );
     } catch (error) {
       Alert.alert(
@@ -97,91 +131,109 @@ export default function EmployerVerificationStepScreen() {
     }
   };
 
-  const handleContinue = () => {
-    if (hasAccess) {
-      router.replace("/(employer)/panel");
-    } else {
-      router.push("/(employer)/planes");
-    }
-  };
-
   return (
-    <AuthSheetLayout
-      title="Verificación empresarial"
-      subtitle="Paso opcional. Sube tu Constancia de Situación Fiscal en PDF para validar tu empresa al instante."
-      showBackButton
-      stepIndicator={{ current: 3, total: 4 }}
-    >
-      <View style={styles.container}>
+    <View style={[styles.screen, { backgroundColor: screenBg }]}>
+      <SettingsHeader title="Verificación de empresa" />
+
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: Math.max(insets.bottom + 36, 56) },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={[styles.introText, { color: theme.textSecondary }]}>
+          Sube tu Constancia de Situación Fiscal en PDF para validar tu negocio
+          y mostrar la insignia de verificación a los candidatos.
+        </Text>
+
         <EmployerVerificationCard
           verified={isVerified}
-          rfc={profile?.rfc}
-          legalName={profile?.legalName}
+          rfc={activeRfc}
+          legalName={activeLegalName}
           uploading={uploading}
           selectedFileName={selectedFileName}
-          onPickPdf={() => void handlePickAndVerifyPdf()}
         />
 
-        <View style={styles.benefitsList}>
-          {BENEFITS.map(({ icon: Icon, text }) => (
-            <View key={text} style={styles.benefitRow}>
-              <View
-                style={[
-                  styles.benefitIcon,
-                  { backgroundColor: theme.primarySoft },
-                ]}
-              >
-                <Icon size={15} color={theme.primary} />
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: cardBg, borderColor: cardBorder },
+          ]}
+        >
+          <Text style={[styles.cardTitle, { color: theme.text }]}>
+            Qué incluye la verificación
+          </Text>
+          <View style={styles.benefitsList}>
+            {BENEFITS.map(({ icon: Icon, text }) => (
+              <View key={text} style={styles.benefitRow}>
+                <View
+                  style={[
+                    styles.benefitIcon,
+                    { backgroundColor: theme.primarySoft },
+                  ]}
+                >
+                  <Icon size={15} color={theme.primary} />
+                </View>
+                <Text
+                  style={[styles.benefitText, { color: theme.textSecondary }]}
+                >
+                  {text}
+                </Text>
               </View>
-              <Text
-                style={[styles.benefitText, { color: theme.textSecondary }]}
-              >
-                {text}
-              </Text>
-            </View>
-          ))}
+            ))}
+          </View>
         </View>
 
-        <View style={styles.actions}>
-          {isVerified ? (
-            <AppButton
-              title={hasAccess ? "Volver al panel" : "Continuar a planes"}
-              disabled={uploading}
-              onPress={handleContinue}
-            />
-          ) : (
-            <>
-              <AppButton
-                title="Seleccionar PDF del SAT"
-                loading={uploading}
-                onPress={() => void handlePickAndVerifyPdf()}
-              />
-              <Pressable
-                onPress={handleContinue}
-                disabled={uploading}
-                style={({ pressed }) => [
-                  styles.skipBtn,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <Text
-                  style={[styles.skipText, { color: theme.textSecondary }]}
-                >
-                  Omitir por ahora
-                </Text>
-              </Pressable>
-            </>
-          )}
-        </View>
-      </View>
-    </AuthSheetLayout>
+        <AppButton
+          title={
+            isVerified
+              ? "Actualizar Constancia Fiscal (PDF)"
+              : "Seleccionar PDF del SAT"
+          }
+          variant={isVerified ? "secondary" : "primary"}
+          loading={uploading}
+          onPress={() => void handlePickAndVerifyPdf()}
+        />
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    width: "100%",
-    gap: 18,
+  screen: {
+    flex: 1,
+  },
+
+  scroll: {
+    flex: 1,
+  },
+
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    gap: 14,
+  },
+
+  introText: {
+    fontSize: 13.5,
+    lineHeight: 19.5,
+    paddingHorizontal: 2,
+  },
+
+  card: {
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 16,
+    gap: 12,
+  },
+
+  cardTitle: {
+    fontSize: 15.5,
+    fontWeight: "800",
+    letterSpacing: -0.2,
   },
 
   benefitsList: {
@@ -195,8 +247,8 @@ const styles = StyleSheet.create({
   },
 
   benefitIcon: {
-    width: 30,
-    height: 30,
+    width: 32,
+    height: 32,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
@@ -205,26 +257,6 @@ const styles = StyleSheet.create({
   benefitText: {
     flex: 1,
     fontSize: 13,
-    lineHeight: 18,
-  },
-
-  actions: {
-    gap: 10,
-    marginTop: 4,
-  },
-
-  skipBtn: {
-    minHeight: 42,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  skipText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-
-  pressed: {
-    opacity: 0.68,
+    lineHeight: 18.5,
   },
 });

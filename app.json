@@ -45,7 +45,19 @@
           "imageWidth": 76
         }
       ],
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": "Perso usa Face ID para proteger tus credenciales de inicio de sesión."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Perso usa Face ID para iniciar sesión de forma rápida y segura."
+        }
+      ],
       "expo-font",
       "expo-apple-authentication",
       [
@@ -53,6 +65,14 @@
         {
           "photosPermission": "Perso necesita acceso a tus fotos para actualizar tu foto de perfil.",
           "cameraPermission": "Perso necesita acceso a tu cámara para tomar una nueva foto de perfil."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Perso necesita acceso a tus fotos para guardar tu Pase QR de entrevista.",
+          "savePhotosPermission": "Perso necesita permiso para guardar tu Pase QR en tu galería de fotos.",
+          "granularPermissions": ["photo"]
         }
       ],
       [

@@ -21,6 +21,7 @@ export default function TuLayout() {
           animation: "slide_from_bottom",
         }}
       />
+      <Stack.Screen name="telefono" />
       <Stack.Screen name="cuenta" />
       <Stack.Screen name="notificaciones" />
       <Stack.Screen name="permisos" />

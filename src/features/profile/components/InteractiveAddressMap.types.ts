@@ -5,6 +5,11 @@ export interface MapCoords {
 
 export interface InteractiveAddressMapProps {
   coords: MapCoords | null;
+  secondaryCoords?: MapCoords | null;
+  primaryLabel?: string;
+  secondaryLabel?: string;
+  distanceBadge?: string;
+  showRouteLine?: boolean;
   height?: number;
   readOnly?: boolean;
   isResolving?: boolean;

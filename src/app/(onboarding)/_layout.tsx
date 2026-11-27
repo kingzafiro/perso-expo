@@ -10,6 +10,7 @@ export default function OnboardingLayout() {
     >
       <Stack.Screen name="index" />
       <Stack.Screen name="notificaciones" />
+      <Stack.Screen name="biometria" />
     </Stack>
   );
 }

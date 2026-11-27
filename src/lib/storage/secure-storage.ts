@@ -4,30 +4,37 @@ import { Platform } from "react-native";
 const ACCESS_TOKEN_KEY = "perso_access_token";
 const REFRESH_TOKEN_KEY = "perso_refresh_token";
 
-async function getItem(key: string) {
+async function getItem(key: string, options?: SecureStore.SecureStoreOptions) {
   if (Platform.OS === "web") {
     return localStorage.getItem(key);
   }
 
-  return SecureStore.getItemAsync(key);
+  return SecureStore.getItemAsync(key, options);
 }
 
-async function setItem(key: string, value: string) {
+async function setItem(
+  key: string,
+  value: string,
+  options?: SecureStore.SecureStoreOptions,
+) {
   if (Platform.OS === "web") {
     localStorage.setItem(key, value);
     return;
   }
 
-  await SecureStore.setItemAsync(key, value);
+  await SecureStore.setItemAsync(key, value, options);
 }
 
-async function removeItem(key: string) {
+async function removeItem(
+  key: string,
+  options?: SecureStore.SecureStoreOptions,
+) {
   if (Platform.OS === "web") {
     localStorage.removeItem(key);
     return;
   }
 
-  await SecureStore.deleteItemAsync(key);
+  await SecureStore.deleteItemAsync(key, options);
 }
 
 export const secureStorage = {

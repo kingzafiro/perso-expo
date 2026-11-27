@@ -12,7 +12,13 @@ import {
   Trash2,
   X,
 } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import {
+  type ComponentRef,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -40,12 +46,19 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 
 import type { ScheduleInterviewInput } from "../types/interviews.types";
+import {
+  formatInterviewDateTime,
+  InterviewDateTimePicker,
+} from "./InterviewDateTimePicker";
 
 interface ScheduleInterviewOverlayProps {
   visible: boolean;
+  mode?: "schedule" | "reschedule";
   candidateName: string;
   vacancyTitle?: string;
   initialAddress?: string;
+  initialReferencias?: string;
+  initialCoords?: MapCoords | null;
   submitting: boolean;
   onClose: () => void;
   onSubmit: (input: ScheduleInterviewInput) => Promise<void>;
@@ -53,9 +66,12 @@ interface ScheduleInterviewOverlayProps {
 
 export function ScheduleInterviewOverlay({
   visible,
+  mode = "schedule",
   candidateName,
   vacancyTitle,
   initialAddress = "",
+  initialReferencias = "",
+  initialCoords = null,
   submitting,
   onClose,
   onSubmit,
@@ -64,31 +80,57 @@ export function ScheduleInterviewOverlay({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
 
-  const [fechaHora, setFechaHora] = useState("");
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [direccion, setDireccion] = useState(initialAddress);
-  const [referencias, setReferencias] = useState("");
-  const [coords, setCoords] = useState<MapCoords | null>(null);
+  const [referencias, setReferencias] = useState(initialReferencias);
+  const [coords, setCoords] = useState<MapCoords | null>(initialCoords);
   const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
   const [searchingAddress, setSearchingAddress] = useState(false);
   const [resolvingMap, setResolvingMap] = useState(false);
   const [locating, setLocating] = useState(false);
   const [mapInteracting, setMapInteracting] = useState(false);
+  const scrollViewRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  const suppressSearchRef = useRef(false);
   const [photo, setPhoto] = useState<{
     uri: string;
     name: string;
     mimeType: string;
   } | null>(null);
 
-  useEffect(() => {
-    if (!visible) return;
-    setPredictions([]);
-    if (!direccion && initialAddress) {
-      setDireccion(initialAddress);
-    }
-  }, [visible, initialAddress, direccion]);
+  const handleMapInteractionChange = useCallback((interacting: boolean) => {
+    const node = scrollViewRef.current as
+      | (ComponentRef<typeof ScrollView> & {
+          setNativeProps?: (props: { scrollEnabled: boolean }) => void;
+        })
+      | null;
+    node?.setNativeProps?.({ scrollEnabled: !interacting });
+    setMapInteracting(interacting);
+  }, []);
 
   useEffect(() => {
     if (!visible) return;
+    setPredictions([]);
+    setSelectedDate(null);
+    setSelectedTime(null);
+    setPhoto(null);
+    if (initialAddress) {
+      suppressSearchRef.current = true;
+      setDireccion(initialAddress);
+    } else {
+      setDireccion("");
+    }
+    setReferencias(initialReferencias);
+    setCoords(initialCoords);
+  }, [visible, initialAddress, initialReferencias, initialCoords]);
+
+  useEffect(() => {
+    if (!visible) return;
+    if (suppressSearchRef.current) {
+      suppressSearchRef.current = false;
+      setPredictions([]);
+      return;
+    }
     const trimmed = direccion.trim();
     if (trimmed.length < 3) {
       setPredictions([]);
@@ -108,7 +150,7 @@ export function ScheduleInterviewOverlay({
     }, 360);
 
     return () => clearTimeout(timer);
-  }, [direccion, coords, visible]);
+  }, [direccion, visible]);
 
   if (!visible) return null;
 
@@ -120,11 +162,13 @@ export function ScheduleInterviewOverlay({
 
   const handleSelectPrediction = async (pred: PlacePrediction) => {
     setPredictions([]);
+    suppressSearchRef.current = true;
     setDireccion(pred.description);
     setResolvingMap(true);
     try {
       const details = await fetchPlaceDetails(pred.placeId);
       if (details.formattedAddress) {
+        suppressSearchRef.current = true;
         setDireccion(details.formattedAddress);
       }
       if (details.lat !== null && details.lng !== null) {
@@ -139,6 +183,7 @@ export function ScheduleInterviewOverlay({
 
   const handleSelectMapCoords = async (nextCoords: MapCoords) => {
     setCoords(nextCoords);
+    setPredictions([]);
     setResolvingMap(true);
     try {
       const resolved = await reverseGeocodeCoords(
@@ -146,6 +191,7 @@ export function ScheduleInterviewOverlay({
         nextCoords.lng,
       );
       if (resolved?.formattedAddress) {
+        suppressSearchRef.current = true;
         setDireccion(resolved.formattedAddress);
       }
     } catch {
@@ -240,6 +286,14 @@ export function ScheduleInterviewOverlay({
   };
 
   const handleSubmitForm = async () => {
+    if (!selectedDate || !selectedTime) {
+      Alert.alert(
+        "Fecha y hora requeridas",
+        "Selecciona el día en el calendario y la hora de la entrevista.",
+      );
+      return;
+    }
+
     if (direccion.trim().length < 5) {
       Alert.alert(
         "Dirección requerida",
@@ -250,9 +304,15 @@ export function ScheduleInterviewOverlay({
     if (Platform.OS !== "web") {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
+
+    const formattedDateTime = formatInterviewDateTime(
+      selectedDate,
+      selectedTime,
+    );
+
     await onSubmit({
       direccion_oficina: direccion.trim(),
-      fecha_hora: fechaHora.trim() || undefined,
+      fecha_hora: formattedDateTime || undefined,
       referencias: referencias.trim() || undefined,
       latitud: coords?.lat ?? null,
       longitud: coords?.lng ?? null,
@@ -276,7 +336,9 @@ export function ScheduleInterviewOverlay({
       >
         <View style={styles.flexOne}>
           <Text style={[styles.headerTitle, { color: theme.text }]}>
-            Agendar entrevista y QR
+            {mode === "reschedule"
+              ? "Reprogramar entrevista"
+              : "Agendar entrevista y QR"}
           </Text>
           <Text
             style={[styles.headerSub, { color: theme.textSecondary }]}
@@ -295,7 +357,9 @@ export function ScheduleInterviewOverlay({
       </View>
 
       <ScrollView
+        ref={scrollViewRef}
         scrollEnabled={!mapInteracting}
+        nestedScrollEnabled
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[
           styles.content,
@@ -303,7 +367,7 @@ export function ScheduleInterviewOverlay({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Fecha y hora */}
+        {/* Fecha y hora separados: Calendario + Selector de hora */}
         <View
           style={[
             styles.card,
@@ -313,23 +377,15 @@ export function ScheduleInterviewOverlay({
           <View style={styles.sectionHeader}>
             <CalendarClock size={16} color={theme.primary} />
             <Text style={[styles.sectionTitle, { color: theme.text }]}>
-              Fecha y hora de la entrevista
+              Fecha y hora de la entrevista *
             </Text>
           </View>
-          <TextInput
-            value={fechaHora}
-            onChangeText={setFechaHora}
-            placeholder="Ej. Viernes 29 de nov · 11:00 AM"
-            placeholderTextColor={theme.textMuted}
-            maxLength={100}
-            style={[
-              styles.input,
-              {
-                backgroundColor: theme.inputBackground,
-                borderColor: theme.inputBorder,
-                color: theme.text,
-              },
-            ]}
+
+          <InterviewDateTimePicker
+            selectedDate={selectedDate}
+            selectedTime={selectedTime}
+            onChangeDate={setSelectedDate}
+            onChangeTime={setSelectedTime}
           />
         </View>
 
@@ -412,12 +468,12 @@ export function ScheduleInterviewOverlay({
 
           <InteractiveAddressMap
             coords={coords}
-            height={170}
+            height={220}
             isResolving={resolvingMap}
             isLocating={locating}
             onSelectCoords={(next) => void handleSelectMapCoords(next)}
             onRequestCurrentLocation={() => void handleUseCurrentLocation()}
-            onMapInteractionChange={setMapInteracting}
+            onMapInteractionChange={handleMapInteractionChange}
           />
 
           <TextInput
@@ -513,15 +569,21 @@ export function ScheduleInterviewOverlay({
 
         <View style={styles.footerWrap}>
           <AppButton
-            title="Enviar ubicación y generar Pase QR"
+            title={
+              mode === "reschedule"
+                ? "Reprogramar y generar nuevo Pase QR"
+                : "Enviar ubicación y generar Pase QR"
+            }
             loading={submitting}
-            disabled={direccion.trim().length < 5}
+            disabled={
+              direccion.trim().length < 5 || !selectedDate || !selectedTime
+            }
             onPress={handleSubmitForm}
           />
           <Text style={[styles.qrNote, { color: theme.textMuted }]}>
-            El candidato recibirá una notificación con la ubicación, la foto y
-            su código QR único. Podrás escanearlo desde tu Panel para aprobar o
-            rechazar su acceso.
+            {mode === "reschedule"
+              ? "La entrevista y el Pase QR anteriores quedarán deshabilitados automáticamente y el candidato recibirá su nuevo pase."
+              : "El candidato recibirá una notificación con la ubicación, la foto y su código QR único. Podrás escanearlo desde Registrar QR para aprobar o rechazar su acceso."}
           </Text>
         </View>
       </ScrollView>

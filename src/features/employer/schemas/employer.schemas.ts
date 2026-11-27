@@ -7,7 +7,15 @@ export const companyStepSchema = z.object({
     .min(2, "Ingresa el nombre comercial de tu empresa"),
   industry: z.string().trim().min(1, "Selecciona el sector de tu empresa"),
   companySize: z.string().trim().min(1, "Selecciona el tamaño del equipo"),
-  city: z.string().trim().min(2, "Selecciona una ciudad desde el buscador"),
+  estado: z.string().trim().min(1, "El estado es obligatorio"),
+  municipio: z.string().trim().min(1, "El municipio es obligatorio"),
+  colonia: z.string().trim().min(1, "La colonia es obligatoria"),
+  calle: z.string().trim().min(1, "La calle es obligatoria"),
+  numero: z.string().trim().min(1, "El número es obligatorio"),
+  cp: z
+    .string()
+    .trim()
+    .regex(/^\d{5}$/, "El código postal debe tener 5 dígitos"),
 });
 
 export type CompanyStepForm = z.infer<typeof companyStepSchema>;
@@ -28,6 +36,10 @@ export const contactStepSchema = z.object({
 });
 
 export type ContactStepForm = z.infer<typeof contactStepSchema>;
+
+export const employerProfileSchema = companyStepSchema.merge(contactStepSchema);
+
+export type EmployerProfileForm = z.infer<typeof employerProfileSchema>;
 
 export const createVacancySchema = z
   .object({

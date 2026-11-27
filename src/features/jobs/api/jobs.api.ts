@@ -1,11 +1,22 @@
 import { env } from "@/config/env";
 import type { DocumentAccessRequest } from "@/features/employer/types/applicant-profile.types";
 import type {
+  ApplicationStatus,
   EmployerVacancy,
   VacancyModality,
   VacancyReportReason,
 } from "@/features/employer/types/employer.types";
 import { apiClient } from "@/lib/api/client";
+
+export interface CandidateApplication {
+  id_postulacion: number;
+  id_vacante: number;
+  estado: ApplicationStatus;
+  mensaje_presentacion: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  vacante: EmployerVacancy;
+}
 
 export async function fetchPublicVacanciesApi(filters?: {
   q?: string;
@@ -37,6 +48,19 @@ export async function fetchFavoriteVacanciesApi(): Promise<EmployerVacancy[]> {
   });
 
   return data.vacantes ?? [];
+}
+
+export async function fetchMyApplicationsApi(): Promise<
+  CandidateApplication[]
+> {
+  const { data } = await apiClient.get<{
+    ok: boolean;
+    postulaciones: CandidateApplication[];
+  }>("/mis-postulaciones", {
+    baseURL: env.vacanciesApiUrl,
+  });
+
+  return data.postulaciones ?? [];
 }
 
 export async function toggleFavoriteVacancyApi(

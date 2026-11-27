@@ -14,7 +14,9 @@ import {
   saveLastJob,
   savePersonalInfo,
   saveUniversity,
+  sendPhoneVerificationCodeApi,
   updateExperienceYear,
+  verifyPhoneCodeApi,
 } from "@/features/profile/api/profile.api";
 import { useAuthStore } from "@/stores/auth.store";
 
@@ -113,6 +115,20 @@ export function useProfileMutations() {
     onSuccess: invalidate,
   });
 
+  const sendPhoneCode = useMutation({
+    mutationFn: sendPhoneVerificationCodeApi,
+  });
+
+  const verifyPhoneCode = useMutation({
+    mutationFn: verifyPhoneCodeApi,
+    onSuccess: async (data) => {
+      if (data.usuario) {
+        useAuthStore.getState().setUser(data.usuario);
+      }
+      await invalidate();
+    },
+  });
+
   return {
     personalInfo,
     address,
@@ -125,5 +141,7 @@ export function useProfileMutations() {
     createExperience,
     updateExperience,
     removeExperience,
+    sendPhoneCode,
+    verifyPhoneCode,
   };
 }

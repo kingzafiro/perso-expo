@@ -2,8 +2,10 @@ import { create } from "zustand";
 
 import {
   activateSandboxTrialApi,
+  deleteEmployerLogoApi,
   getEmployerStatusApi,
   syncEmployerSubscriptionApi,
+  uploadEmployerLogoApi,
   uploadEmployerVerificationPdfApi,
   upsertEmployerProfileApi,
   type SyncSubscriptionInput,
@@ -33,13 +35,24 @@ export interface EmployerDraft {
   companyName: string;
   legalName: string;
   rfc: string;
+  verifiedPdf: boolean;
   industry: string;
   companySize: string;
   city: string;
+  estado: string;
+  municipio: string;
+  calle: string;
+  numero: string;
+  colonia: string;
+  cp: string;
+  latitud: number | null;
+  longitud: number | null;
   contactName: string;
   contactRole: string;
   workEmail: string;
+  workEmailVerified: boolean;
   phone: string;
+  phoneVerified: boolean;
   description: string;
 }
 
@@ -47,13 +60,24 @@ const EMPTY_DRAFT: EmployerDraft = {
   companyName: "",
   legalName: "",
   rfc: "",
+  verifiedPdf: false,
   industry: "",
   companySize: "",
   city: "",
+  estado: "",
+  municipio: "",
+  calle: "",
+  numero: "",
+  colonia: "",
+  cp: "",
+  latitud: null,
+  longitud: null,
   contactName: "",
   contactRole: "",
   workEmail: "",
+  workEmailVerified: false,
   phone: "",
+  phoneVerified: false,
   description: "",
 };
 
@@ -69,13 +93,24 @@ function profileToDraft(profile: EmployerProfile | null): EmployerDraft {
     companyName: profile.companyName ?? "",
     legalName: profile.legalName ?? "",
     rfc: profile.rfc ?? "",
+    verifiedPdf: Boolean(profile.verified && profile.rfc),
     industry: profile.industry ?? "",
     companySize: profile.companySize ?? "",
     city: profile.city ?? "",
+    estado: profile.estado ?? "",
+    municipio: profile.municipio ?? "",
+    calle: profile.calle ?? "",
+    numero: profile.numero ?? "",
+    colonia: profile.colonia ?? "",
+    cp: profile.cp ?? "",
+    latitud: typeof profile.latitud === "number" ? profile.latitud : null,
+    longitud: typeof profile.longitud === "number" ? profile.longitud : null,
     contactName: profile.contactName ?? "",
     contactRole: profile.contactRole ?? "",
     workEmail: profile.workEmail ?? "",
+    workEmailVerified: Boolean(profile.workEmailVerified),
     phone: profile.phone ?? "",
+    phoneVerified: Boolean(profile.phoneVerified),
     description: profile.description ?? "",
   };
 }
@@ -119,6 +154,7 @@ interface EmployerState {
   saveProfileToServer: (options?: {
     selectedPlanId?: EmployerPlanId | null;
     billingCycle?: BillingCycle;
+    requireContactVerification?: boolean;
   }) => Promise<EmployerStatusPayload>;
   syncSubscriptionWithServer: (
     payload: SyncSubscriptionInput,
@@ -135,6 +171,12 @@ interface EmployerState {
     payload: EmployerStatusPayload;
     extraccion: EmployerPdfExtraction;
   }>;
+  uploadLogo: (file: {
+    uri: string;
+    name: string;
+    mimeType: string;
+  }) => Promise<EmployerStatusPayload>;
+  deleteLogo: () => Promise<EmployerStatusPayload>;
   clearEmployerProfile: () => Promise<void>;
 }
 
@@ -216,13 +258,25 @@ export const useEmployerStore = create<EmployerState>((set, get) => {
 
     saveProfileToServer: async (options) => {
       const { draft } = get();
+      const derivedCity = [draft.municipio, draft.estado]
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .join(", ");
       const payload = await upsertEmployerProfileApi({
         companyName: draft.companyName,
         legalName: draft.legalName || undefined,
         rfc: draft.rfc || undefined,
         industry: draft.industry,
         companySize: draft.companySize,
-        city: draft.city,
+        city: derivedCity || draft.city,
+        estado: draft.estado || undefined,
+        municipio: draft.municipio || undefined,
+        calle: draft.calle || undefined,
+        numero: draft.numero || undefined,
+        colonia: draft.colonia || undefined,
+        cp: draft.cp || undefined,
+        latitud: draft.latitud,
+        longitud: draft.longitud,
         contactName: draft.contactName,
         contactRole: draft.contactRole,
         workEmail: draft.workEmail,
@@ -230,6 +284,7 @@ export const useEmployerStore = create<EmployerState>((set, get) => {
         description: draft.description,
         selectedPlanId: options?.selectedPlanId ?? null,
         billingCycle: options?.billingCycle ?? "monthly",
+        requireContactVerification: options?.requireContactVerification,
       });
       await applyPayload(payload);
       return payload;
@@ -249,11 +304,34 @@ export const useEmployerStore = create<EmployerState>((set, get) => {
 
     uploadVerificationPdf: async (file) => {
       const result = await uploadEmployerVerificationPdfApi(file);
-      await applyPayload(result);
+      if (result.empresa) {
+        await applyPayload(result);
+      } else {
+        set((state) => ({
+          draft: {
+            ...state.draft,
+            rfc: result.extraccion.rfc,
+            legalName: result.extraccion.razonSocial,
+            verifiedPdf: true,
+          },
+        }));
+      }
       return {
         payload: result,
         extraccion: result.extraccion,
       };
+    },
+
+    uploadLogo: async (file) => {
+      const result = await uploadEmployerLogoApi(file);
+      await applyPayload(result);
+      return result;
+    },
+
+    deleteLogo: async () => {
+      const result = await deleteEmployerLogoApi();
+      await applyPayload(result);
+      return result;
     },
 
     clearEmployerProfile: async () => {

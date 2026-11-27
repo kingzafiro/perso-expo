@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  cancelEmployerInterviewApi,
   fetchEmployerInterviewsApi,
   fetchMyInterviewsApi,
   lookupEmployerInterviewQrApi,
@@ -85,6 +86,55 @@ export function useResolveInterviewQr() {
       accion: "aprobar" | "rechazar";
       notas?: string;
     }) => resolveEmployerInterviewQrApi(idEntrevista, { accion, notas }),
+    onSuccess: async (res) => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: EMPLOYER_INTERVIEWS_QUERY_KEY,
+        }),
+        queryClient.invalidateQueries({ queryKey: MY_INTERVIEWS_QUERY_KEY }),
+        queryClient.invalidateQueries({
+          queryKey: applicantProfileQueryKey(res.entrevista.id_postulacion),
+        }),
+      ]);
+    },
+  });
+}
+
+export function useRescheduleEmployerInterview() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      idPostulacion,
+      input,
+    }: {
+      idPostulacion: number;
+      idVacante: number;
+      input: ScheduleInterviewInput;
+    }) => scheduleApplicantInterviewApi(idPostulacion, input),
+    onSuccess: async (_res, vars) => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: EMPLOYER_INTERVIEWS_QUERY_KEY,
+        }),
+        queryClient.invalidateQueries({ queryKey: MY_INTERVIEWS_QUERY_KEY }),
+        queryClient.invalidateQueries({
+          queryKey: applicantProfileQueryKey(vars.idPostulacion),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["employer", "vacancies", vars.idVacante, "applicants"],
+        }),
+      ]);
+    },
+  });
+}
+
+export function useCancelEmployerInterview() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (idEntrevista: number) =>
+      cancelEmployerInterviewApi(idEntrevista),
     onSuccess: async (res) => {
       await Promise.all([
         queryClient.invalidateQueries({

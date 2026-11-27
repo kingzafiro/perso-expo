@@ -25,6 +25,7 @@ export interface InterviewPass {
   empresa: {
     id_empresa: number;
     nombre_comercial: string;
+    logo_url?: string | null;
     industria: string;
     ciudad: string;
     verificada: boolean;

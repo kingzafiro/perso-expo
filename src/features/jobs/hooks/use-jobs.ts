@@ -21,6 +21,7 @@ import type {
 import {
   applyToVacancyApi,
   fetchFavoriteVacanciesApi,
+  fetchMyApplicationsApi,
   fetchMyDocumentRequestsApi,
   fetchPublicVacanciesApi,
   reportVacancyApi,
@@ -36,6 +37,11 @@ export const MY_DOC_REQUESTS_QUERY_KEY = [
 export const MY_FAVORITE_JOBS_QUERY_KEY = [
   "candidate",
   "favorite-vacancies",
+] as const;
+
+export const MY_APPLICATIONS_QUERY_KEY = [
+  "candidate",
+  "applications",
 ] as const;
 
 const FAVORITE_DEBOUNCE_MS = 500;
@@ -163,6 +169,13 @@ export function useFavoriteVacancies() {
   });
 }
 
+export function useMyApplications() {
+  return useQuery({
+    queryKey: MY_APPLICATIONS_QUERY_KEY,
+    queryFn: fetchMyApplicationsApi,
+  });
+}
+
 export function useToggleFavoriteVacancy() {
   const queryClient = useQueryClient();
 
@@ -237,6 +250,7 @@ export function useApplyToVacancy() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: PUBLIC_JOBS_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: MY_FAVORITE_JOBS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: MY_APPLICATIONS_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: EMPLOYER_VACANCIES_QUERY_KEY }),
       ]);
     },

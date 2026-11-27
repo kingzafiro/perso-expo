@@ -37,6 +37,7 @@ interface ProfileEditSheetProps {
   scrollEnabled?: boolean;
   onClose: () => void;
   onDismiss?: () => void;
+  overlay?: ReactNode;
   children: ReactNode;
 }
 
@@ -47,6 +48,7 @@ export function ProfileEditSheet({
   scrollEnabled = true,
   onClose,
   onDismiss,
+  overlay,
   children,
 }: ProfileEditSheetProps) {
   const colorScheme = useColorScheme();
@@ -284,6 +286,8 @@ export function ProfileEditSheet({
             )}
           </Animated.View>
         </View>
+
+        {overlay}
       </View>
     </Modal>
   );

@@ -60,7 +60,7 @@ export default function AppLayout() {
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="empleos">
-        <NativeTabs.Trigger.Label>Empleos</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Mis empleos</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
           sf={{ default: "briefcase", selected: "briefcase.fill" }}
           md="work"

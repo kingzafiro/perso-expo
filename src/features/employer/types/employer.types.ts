@@ -40,15 +40,26 @@ export type VacancyReportReason =
 export interface EmployerProfile {
   id_empresa?: number;
   companyName: string;
+  logoUrl?: string | null;
   legalName: string;
   rfc: string;
   industry: string;
   companySize: string;
   city: string;
+  estado?: string;
+  municipio?: string;
+  calle?: string;
+  numero?: string;
+  colonia?: string;
+  cp?: string;
+  latitud?: number | null;
+  longitud?: number | null;
   contactName: string;
   contactRole: string;
   workEmail: string;
+  workEmailVerified?: boolean;
   phone: string;
+  phoneVerified?: boolean;
   description: string;
   hasVerificationDocument?: boolean;
   verified?: boolean;
@@ -103,6 +114,7 @@ export interface EmployerStatusPayload {
 export interface VacancyCompanySummary {
   id_empresa: number;
   nombre_comercial: string;
+  logo_url?: string | null;
   industria: string;
   ciudad: string;
   verificada: boolean;
@@ -188,6 +200,18 @@ export interface AdminReport {
     email: string;
   } | null;
 }
+
+export const EMPLOYER_CONTACT_ROLES = [
+  "Director General / CEO",
+  "Dueño / Socio fundador",
+  "Gerente de Recursos Humanos",
+  "Reclutador / Talento Humano",
+  "Coordinador de Reclutamiento",
+  "Gerente Administrativo",
+  "Gerente de Operaciones",
+  "Jefe o Líder de Área",
+  "Asistente de Dirección / RH",
+] as const;
 
 export const EMPLOYER_INDUSTRIES = [
   "Tecnología",
@@ -369,4 +393,27 @@ export function formatVacancyLocation(vacancy: {
     .map((p) => (p || "").trim())
     .filter(Boolean)
     .join(", ");
+}
+
+export function formatTime12h(hhmm: string): string {
+  const match = hhmm.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return hhmm;
+  const h24 = Number(match[1]);
+  const minutes = match[2];
+  if (!Number.isFinite(h24) || h24 < 0 || h24 > 23) return hhmm;
+  const period = h24 >= 12 ? "PM" : "AM";
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${minutes} ${period}`;
+}
+
+export function formatVacancySchedule(raw?: string | null): string {
+  const clean = (raw || "").trim();
+  if (!clean) return "";
+
+  // Convierte horarios en formato 24h (ej. "09:00", "18:00 hrs") a 12h AM/PM
+  // sin alterar los que ya incluyen AM/PM o a. m./p. m.
+  return clean.replace(
+    /\b([01]?\d|2[0-3]):([0-5]\d)(?:\s*hrs\.?)?(?!\s*(?:[ap]\.?\s*m\.?))/gi,
+    (_full, hStr: string, mStr: string) => formatTime12h(`${hStr}:${mStr}`),
+  );
 }

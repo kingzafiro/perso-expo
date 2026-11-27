@@ -11,6 +11,7 @@ export default function EmpresasLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="candidatos" />
       <Stack.Screen name="publicaciones" />
+      <Stack.Screen name="entrevistas" />
     </Stack>
   );
 }

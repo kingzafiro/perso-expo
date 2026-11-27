@@ -3,14 +3,18 @@ import {
   Briefcase,
   Building2,
   CheckCircle2,
+  Clock,
+  Laptop,
   MapPin,
   Wallet,
 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { CompanyLogo } from "@/features/employer/components/CompanyLogo";
 import {
   formatVacancyLocation,
   formatVacancySalary,
+  formatVacancySchedule,
   VACANCY_CONTRACTS,
   VACANCY_MODALITIES,
   type EmployerVacancy,
@@ -59,46 +63,67 @@ export function JobFeedCard({
       >
         <View
           style={[
-            styles.topRow,
-            onToggleFavorite ? styles.topRowWithFavorite : null,
+            styles.headerRow,
+            onToggleFavorite ? styles.headerRowWithFavorite : null,
           ]}
         >
-          <Text
-            style={[styles.title, { color: theme.text }]}
-            numberOfLines={2}
-          >
-            {vacancy.titulo}
-          </Text>
+          <CompanyLogo
+            uri={vacancy.empresa?.logo_url}
+            size={44}
+            borderRadius={13}
+          />
 
-          {vacancy.ya_postulado ? (
+          <View style={styles.headerTextCol}>
+            <Text
+              style={[styles.title, { color: theme.text }]}
+              numberOfLines={2}
+            >
+              {vacancy.titulo}
+            </Text>
+
+            <View style={styles.companyRow}>
+              <Text
+                style={[styles.companyText, { color: theme.textSecondary }]}
+                numberOfLines={1}
+              >
+                {vacancy.empresa?.nombre_comercial || "Empresa en Perso"}
+              </Text>
+              {vacancy.empresa?.verificada ? (
+                <BadgeCheck size={14} color="#34C759" />
+              ) : null}
+            </View>
+          </View>
+        </View>
+
+        {vacancy.ya_postulado ? (
+          <View style={styles.appliedRow}>
             <View style={styles.appliedPill}>
               <CheckCircle2 size={12} color="#34C759" />
               <Text style={styles.appliedPillText}>Postulado</Text>
             </View>
-          ) : null}
-        </View>
+          </View>
+        ) : null}
 
-        <View style={styles.companyRow}>
-          <Building2 size={13} color={theme.primary} />
-          <Text
-            style={[styles.companyText, { color: theme.text }]}
-            numberOfLines={1}
-          >
-            {vacancy.empresa?.nombre_comercial || "Empresa en Perso"}
-          </Text>
-          {vacancy.empresa?.verificada ? (
-            <BadgeCheck size={14} color="#34C759" />
-          ) : null}
-        </View>
+        <View style={styles.metaStack}>
+          <View style={styles.locationRow}>
+            <MapPin size={13} color={theme.textSecondary} />
+            <Text
+              style={[styles.locationText, { color: theme.textSecondary }]}
+              numberOfLines={1}
+            >
+              {formatVacancyLocation(vacancy)}
+            </Text>
+          </View>
 
-        <View style={styles.locationRow}>
-          <MapPin size={13} color={theme.textSecondary} />
-          <Text
-            style={[styles.locationText, { color: theme.textSecondary }]}
-            numberOfLines={1}
-          >
-            {formatVacancyLocation(vacancy)} · {modalityLabel}
-          </Text>
+          <View style={styles.locationRow}>
+            <Clock size={13} color={theme.textSecondary} />
+            <Text
+              style={[styles.locationText, { color: theme.textSecondary }]}
+              numberOfLines={1}
+            >
+              {formatVacancySchedule(vacancy.horario) || "Horario a convenir"}
+            </Text>
+          </View>
         </View>
 
         <View
@@ -116,10 +141,35 @@ export function JobFeedCard({
 
         <View style={styles.chipsRow}>
           <View
-            style={[styles.chip, { backgroundColor: theme.inputBackground }]}
+            style={[
+              styles.chip,
+              {
+                backgroundColor: theme.inputBackground,
+                borderColor: theme.inputBorder,
+              },
+            ]}
           >
-            <Briefcase size={11} color={theme.textSecondary} />
-            <Text style={[styles.chipText, { color: theme.textSecondary }]}>
+            {vacancy.modalidad === "remoto" ? (
+              <Laptop size={11.5} color={theme.primary} />
+            ) : (
+              <Building2 size={11.5} color={theme.primary} />
+            )}
+            <Text style={[styles.chipTextStrong, { color: theme.text }]}>
+              {modalityLabel}
+            </Text>
+          </View>
+
+          <View
+            style={[
+              styles.chip,
+              {
+                backgroundColor: theme.inputBackground,
+                borderColor: theme.inputBorder,
+              },
+            ]}
+          >
+            <Briefcase size={11.5} color={theme.primary} />
+            <Text style={[styles.chipTextStrong, { color: theme.text }]}>
               {contractLabel}
             </Text>
           </View>
@@ -163,22 +213,29 @@ const styles = StyleSheet.create({
     gap: 9,
   },
 
-  topRow: {
+  headerRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 8,
+    alignItems: "center",
+    gap: 12,
   },
 
-  topRowWithFavorite: {
-    paddingRight: 44,
+  headerRowWithFavorite: {
+    paddingRight: 42,
+  },
+
+  headerTextCol: {
+    flex: 1,
+    gap: 3,
   },
 
   title: {
-    flex: 1,
-    fontSize: 17,
+    fontSize: 16.5,
     fontWeight: "800",
     letterSpacing: -0.3,
+  },
+
+  appliedRow: {
+    flexDirection: "row",
   },
 
   favOverlay: {
@@ -216,10 +273,14 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
 
+  metaStack: {
+    gap: 5,
+  },
+
   locationRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
   },
 
   locationText: {
@@ -252,10 +313,17 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 5,
     paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 9,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "transparent",
+  },
+
+  chipTextStrong: {
+    fontSize: 11.5,
+    fontWeight: "700",
   },
 
   chipText: {

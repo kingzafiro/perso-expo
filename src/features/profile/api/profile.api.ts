@@ -17,9 +17,36 @@ export async function savePersonalInfo(payload: {
   nombre: string;
   apellido_paterno?: string;
   apellido_materno?: string;
-  celular?: string;
 }): Promise<{ ok: boolean; mensaje: string; usuario?: ProfileUser }> {
   const { data } = await apiClient.post("/usuario/datos/nombre", payload);
+  return data;
+}
+
+export async function sendPhoneVerificationCodeApi(payload: {
+  codigo_pais: string;
+  numero: string;
+}): Promise<{
+  ok: boolean;
+  mensaje: string;
+  telefono: string;
+  cooldown_segundos: number;
+  proveedor?: string;
+  debug_codigo?: string;
+}> {
+  const { data } = await apiClient.post(
+    "/usuario/telefono/enviar-codigo",
+    payload,
+  );
+  return data;
+}
+
+export async function verifyPhoneCodeApi(payload: {
+  codigo: string;
+}): Promise<{ ok: boolean; mensaje: string; usuario: ProfileUser }> {
+  const { data } = await apiClient.post(
+    "/usuario/telefono/verificar-codigo",
+    payload,
+  );
   return data;
 }
 

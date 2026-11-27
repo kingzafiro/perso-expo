@@ -6,6 +6,7 @@ import {
   uploadUserDocument,
 } from "@/features/documents/api/documents.api";
 import type { DocumentType } from "@/features/documents/types/documents.types";
+import { FULL_PROFILE_QUERY_KEY } from "@/features/profile/hooks/use-full-profile";
 
 export const USER_DOCUMENTS_QUERY_KEY = ["user-documents"] as const;
 
@@ -22,8 +23,12 @@ export function useUserDocuments() {
 export function useDocumentMutations() {
   const queryClient = useQueryClient();
 
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: USER_DOCUMENTS_QUERY_KEY });
+  const invalidate = async (tipo?: DocumentType) => {
+    await queryClient.invalidateQueries({ queryKey: USER_DOCUMENTS_QUERY_KEY });
+    if (tipo === "ingles") {
+      await queryClient.invalidateQueries({ queryKey: FULL_PROFILE_QUERY_KEY });
+    }
+  };
 
   const upload = useMutation({
     mutationFn: ({
@@ -33,12 +38,12 @@ export function useDocumentMutations() {
       tipo: DocumentType;
       file: { uri: string; name: string; mimeType: string };
     }) => uploadUserDocument(tipo, file),
-    onSuccess: invalidate,
+    onSuccess: (_data, variables) => invalidate(variables.tipo),
   });
 
   const remove = useMutation({
     mutationFn: (tipo: DocumentType) => deleteUserDocument(tipo),
-    onSuccess: invalidate,
+    onSuccess: (_data, tipo) => invalidate(tipo),
   });
 
   return { upload, remove };

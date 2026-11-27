@@ -1,25 +1,41 @@
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
+import { Briefcase, Search, X } from "lucide-react-native";
+import { useState } from "react";
 import {
-  ArrowRight,
-  Briefcase,
-  FileText,
-  UserCheck,
-} from "lucide-react-native";
-import {
+  ActivityIndicator,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import type {
+  EmployerVacancy,
+  VacancyModality,
+} from "@/features/employer/types/employer.types";
+import { JobDetailModal } from "@/features/jobs/components/JobDetailModal";
+import { JobFeedCard } from "@/features/jobs/components/JobFeedCard";
+import {
+  usePublicVacancies,
+  useToggleFavoriteVacancy,
+} from "@/features/jobs/hooks/use-jobs";
 import { ProfileAvatar } from "@/features/profile/components/ProfileAvatar";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuthStore } from "@/stores/auth.store";
+
+const MODALITY_FILTERS: { id: VacancyModality | "all"; label: string }[] = [
+  { id: "all", label: "Todos" },
+  { id: "presencial", label: "Presencial" },
+  { id: "hibrido", label: "Híbrido" },
+  { id: "remoto", label: "Remoto" },
+];
 
 function getFirstName(nombre?: string | null, email?: string) {
   const clean = (nombre ?? "").trim();
@@ -47,20 +63,40 @@ export default function InicioScreen() {
   const insets = useSafeAreaInsets();
   const user = useAuthStore((state) => state.user);
 
+  const [searchText, setSearchText] = useState("");
+  const [modalidad, setModalidad] = useState<VacancyModality | "all">("all");
+  const [selectedVacancy, setSelectedVacancy] =
+    useState<EmployerVacancy | null>(null);
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+
+  const {
+    data: vacancies = [],
+    isLoading,
+    refetch,
+  } = usePublicVacancies({ q: searchText, modalidad });
+  const { toggleFavorite } = useToggleFavoriteVacancy();
+
   const firstName = getFirstName(user?.nombre, user?.email);
   const initials = getInitials(user?.nombre, user?.email);
+
+  const handleManualRefresh = async () => {
+    setManualRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setManualRefreshing(false);
+    }
+  };
+
+  const handleToggleFavorite = (vacancy: EmployerVacancy) => {
+    toggleFavorite(vacancy);
+  };
 
   const screenBg = isDark ? "#000000" : "#F5F2EF";
   const cardBg = isDark ? "#181513" : "#FFFFFF";
   const cardBorder = isDark
     ? "rgba(255, 255, 255, 0.08)"
-    : "rgba(23, 18, 14, 0.07)";
-
-  const triggerHaptic = () => {
-    if (Platform.OS !== "web") {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-  };
+    : "rgba(23, 18, 14, 0.08)";
 
   return (
     <View style={[styles.screen, { backgroundColor: screenBg }]}>
@@ -72,116 +108,155 @@ export default function InicioScreen() {
           { paddingTop: Math.max(insets.top + 14, 24) },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={manualRefreshing}
+            onRefresh={() => void handleManualRefresh()}
+            tintColor={theme.primary}
+          />
+        }
       >
         <View style={styles.header}>
           <View style={styles.headerText}>
-            <Text style={[styles.eyebrow, { color: theme.primary }]}>PERSO</Text>
-            <Text style={[styles.greeting, { color: theme.text }]}>
-              Hola, {firstName}
+            <Text style={[styles.eyebrow, { color: theme.primary }]}>
+              VACANTES EN PERSO
             </Text>
-            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-              Encuentra vacantes ideales para ti hoy
+            <Text
+              style={[styles.title, { color: theme.text }]}
+              numberOfLines={1}
+            >
+              Hola, {firstName}
             </Text>
           </View>
 
           <ProfileAvatar
             uri={user?.foto_perfil}
             initials={initials}
-            size={48}
+            size={44}
             onPress={() => router.push("/(app)/tu/perfil")}
           />
         </View>
 
         <View
           style={[
-            styles.candidateCard,
+            styles.searchBox,
             { backgroundColor: cardBg, borderColor: cardBorder },
           ]}
         >
-          <View style={styles.cardTopRow}>
+          <Search size={17} color={theme.textMuted} />
+          <TextInput
+            value={searchText}
+            onChangeText={setSearchText}
+            placeholder="Puesto, ciudad o palabra clave..."
+            placeholderTextColor={theme.textMuted}
+            style={[styles.searchInput, { color: theme.text }]}
+            returnKeyType="search"
+          />
+          {searchText.length > 0 ? (
+            <Pressable onPress={() => setSearchText("")} hitSlop={8}>
+              <X size={16} color={theme.textMuted} />
+            </Pressable>
+          ) : null}
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filtersRow}
+        >
+          {MODALITY_FILTERS.map((item) => {
+            const active = modalidad === item.id;
+            return (
+              <Pressable
+                key={item.id}
+                onPress={() => {
+                  if (Platform.OS !== "web") void Haptics.selectionAsync();
+                  setModalidad(item.id);
+                }}
+                style={[
+                  styles.filterPill,
+                  {
+                    backgroundColor: active ? theme.primary : cardBg,
+                    borderColor: active ? theme.primary : cardBorder,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.filterText,
+                    { color: active ? "#FFFFFF" : theme.text },
+                  ]}
+                >
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {isLoading ? (
+          <View style={styles.loaderBox}>
+            <ActivityIndicator color={theme.primary} />
+          </View>
+        ) : vacancies.length === 0 ? (
+          <View
+            style={[
+              styles.emptyCard,
+              { backgroundColor: cardBg, borderColor: cardBorder },
+            ]}
+          >
             <View
               style={[
-                styles.rolePill,
+                styles.emptyIcon,
                 { backgroundColor: theme.primarySoft },
               ]}
             >
-              <Briefcase size={13} color={theme.primary} />
-              <Text style={[styles.rolePillText, { color: theme.primary }]}>
-                Buscar empleo
-              </Text>
+              <Briefcase size={24} color={theme.primary} />
             </View>
-          </View>
-
-          <View style={styles.cardBody}>
-            <Text style={[styles.cardTitle, { color: theme.text }]}>
-              Encuentra tu próxima oportunidad
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>
+              No encontramos vacantes por ahora
             </Text>
-            <Text
-              style={[styles.cardSubtitle, { color: theme.textSecondary }]}
-            >
-              Descubre vacantes cerca de tu ubicación y postúlate rápido con tu
-              perfil y expediente listo.
+            <Text style={[styles.emptyDesc, { color: theme.textSecondary }]}>
+              {searchText || modalidad !== "all"
+                ? "Prueba limpiar tus filtros de búsqueda para ver todas las oportunidades."
+                : "En cuanto las empresas publiquen nuevas vacantes aparecerán aquí."}
             </Text>
           </View>
-
-          <Pressable
-            onPress={() => {
-              triggerHaptic();
-              router.push("/(app)/empleos");
-            }}
-            style={({ pressed }) => [
-              styles.primaryCta,
-              { backgroundColor: theme.primary },
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text style={styles.primaryCtaText}>Explorar empleos</Text>
-            <ArrowRight size={17} color="#FFFFFF" />
-          </Pressable>
-
-          <View style={styles.quickShortcuts}>
-            <Pressable
-              onPress={() => {
-                triggerHaptic();
-                router.push("/(app)/tu/perfil");
-              }}
-              style={({ pressed }) => [
-                styles.shortcutTile,
-                {
-                  backgroundColor: theme.inputBackground,
-                  borderColor: theme.inputBorder,
-                },
-                pressed && styles.pressed,
-              ]}
-            >
-              <UserCheck size={16} color={theme.primary} />
-              <Text style={[styles.shortcutText, { color: theme.text }]}>
-                Mi perfil
-              </Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() => {
-                triggerHaptic();
-                router.push("/(app)/tu/documentos");
-              }}
-              style={({ pressed }) => [
-                styles.shortcutTile,
-                {
-                  backgroundColor: theme.inputBackground,
-                  borderColor: theme.inputBorder,
-                },
-                pressed && styles.pressed,
-              ]}
-            >
-              <FileText size={16} color={theme.primary} />
-              <Text style={[styles.shortcutText, { color: theme.text }]}>
-                Mis documentos
-              </Text>
-            </Pressable>
+        ) : (
+          <View style={styles.list}>
+            {vacancies.map((vacancy) => (
+              <JobFeedCard
+                key={vacancy.id_vacante}
+                vacancy={vacancy}
+                onToggleFavorite={() => handleToggleFavorite(vacancy)}
+                onPress={() => {
+                  if (Platform.OS !== "web") void Haptics.selectionAsync();
+                  setSelectedVacancy(vacancy);
+                }}
+              />
+            ))}
           </View>
-        </View>
+        )}
       </ScrollView>
+
+      <JobDetailModal
+        vacancy={selectedVacancy}
+        onClose={() => setSelectedVacancy(null)}
+        onApplied={(id) =>
+          setSelectedVacancy((prev) =>
+            prev && prev.id_vacante === id
+              ? { ...prev, ya_postulado: true, estado_postulacion: "enviada" }
+              : prev,
+          )
+        }
+        onFavoriteChanged={(id, isFavorite) =>
+          setSelectedVacancy((prev) =>
+            prev && prev.id_vacante === id
+              ? { ...prev, es_favorito: isFavorite }
+              : prev,
+          )
+        }
+      />
     </View>
   );
 }
@@ -198,7 +273,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingBottom: 130,
-    gap: 18,
+    gap: 14,
   },
 
   header: {
@@ -215,105 +290,84 @@ const styles = StyleSheet.create({
   },
 
   eyebrow: {
-    fontSize: 11.5,
+    fontSize: 11,
     fontWeight: "800",
-    letterSpacing: 1.4,
+    letterSpacing: 1.2,
   },
 
-  greeting: {
-    fontSize: 28,
+  title: {
+    fontSize: 27,
     fontWeight: "800",
-    letterSpacing: -0.7,
+    letterSpacing: -0.6,
   },
 
-  subtitle: {
-    fontSize: 14.5,
-    marginTop: 1,
-  },
-
-  candidateCard: {
-    borderRadius: 24,
+  searchBox: {
+    minHeight: 48,
+    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 18,
-    gap: 15,
-  },
-
-  cardTopRow: {
+    paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     gap: 10,
   },
 
-  rolePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-
-  rolePillText: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
-
-  cardBody: {
-    gap: 5,
-  },
-
-  cardTitle: {
-    fontSize: 21,
-    fontWeight: "800",
-    letterSpacing: -0.4,
-  },
-
-  cardSubtitle: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-
-  primaryCta: {
-    minHeight: 50,
-    borderRadius: 25,
-    paddingHorizontal: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-
-  primaryCtaText: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "700",
-    letterSpacing: -0.2,
-  },
-
-  quickShortcuts: {
-    flexDirection: "row",
-    gap: 10,
-  },
-
-  shortcutTile: {
+  searchInput: {
     flex: 1,
-    minHeight: 44,
-    borderRadius: 15,
+    fontSize: 15,
+    paddingVertical: 10,
+  },
+
+  filtersRow: {
+    gap: 8,
+    paddingVertical: 2,
+  },
+
+  filterPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
+  },
+
+  filterText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  loaderBox: {
+    paddingVertical: 48,
+    alignItems: "center",
+  },
+
+  emptyCard: {
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 24,
+    alignItems: "center",
+    gap: 9,
+  },
+
+  emptyIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    gap: 7,
   },
 
-  shortcutText: {
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+
+  emptyDesc: {
     fontSize: 13.5,
-    fontWeight: "600",
+    lineHeight: 19,
+    textAlign: "center",
   },
 
-  pressed: {
-    opacity: 0.78,
-    transform: [{ scale: 0.985 }],
+  list: {
+    gap: 12,
   },
 });

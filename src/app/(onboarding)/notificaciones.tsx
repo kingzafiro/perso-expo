@@ -1,4 +1,5 @@
 import * as Haptics from "expo-haptics";
+import { router } from "expo-router";
 import { Bell, Briefcase, ShieldCheck, Sparkles } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import {
@@ -21,6 +22,7 @@ import Animated, {
 
 import { AppButton } from "@/components/ui/AppButton";
 import { AuthSheetLayout } from "@/features/auth/components/AuthSheetLayout";
+import { useBiometricStatus } from "@/features/auth/hooks/use-biometric-login";
 import { registerDeviceForPushNotifications } from "@/features/notifications/lib/notifications-client";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
@@ -51,7 +53,19 @@ export default function OnboardingNotificacionesScreen() {
   const setNotificationsBulk = usePreferencesStore(
     (state) => state.setNotificationsBulk,
   );
+  const { status: biometricStatus } = useBiometricStatus();
+  const hasBiometricStep =
+    biometricStatus.isSupported && !biometricStatus.isEnabled;
+  const totalSteps = hasBiometricStep ? 3 : 2;
   const [requesting, setRequesting] = useState(false);
+
+  const proceedNext = async () => {
+    if (hasBiometricStep) {
+      router.push("/(onboarding)/biometria");
+      return;
+    }
+    await completeOnboarding();
+  };
 
   const bellTilt = useSharedValue(0);
   const pulse = useSharedValue(0);
@@ -94,7 +108,7 @@ export default function OnboardingNotificacionesScreen() {
 
     try {
       if (Platform.OS === "web") {
-        await completeOnboarding();
+        await proceedNext();
         return;
       }
 
@@ -108,7 +122,7 @@ export default function OnboardingNotificacionesScreen() {
           postulaciones: true,
           seguridad: true,
         });
-        await completeOnboarding();
+        await proceedNext();
         return;
       }
 
@@ -121,14 +135,14 @@ export default function OnboardingNotificacionesScreen() {
               text: "Continuar sin activar",
               style: "cancel",
               onPress: () => {
-                void completeOnboarding();
+                void proceedNext();
               },
             },
             {
               text: "Abrir configuración",
               onPress: async () => {
                 await Linking.openSettings();
-                await completeOnboarding();
+                await proceedNext();
               },
             },
           ],
@@ -149,9 +163,9 @@ export default function OnboardingNotificacionesScreen() {
         );
       }
 
-      await completeOnboarding();
+      await proceedNext();
     } catch {
-      await completeOnboarding();
+      await proceedNext();
     } finally {
       setRequesting(false);
     }
@@ -161,7 +175,7 @@ export default function OnboardingNotificacionesScreen() {
     if (Platform.OS !== "web") {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    await completeOnboarding();
+    await proceedNext();
   };
 
   const previewCardBg = isDark
@@ -173,7 +187,7 @@ export default function OnboardingNotificacionesScreen() {
       title="Mantente al día"
       subtitle="Activa las notificaciones para no perderte ninguna oportunidad en Perso."
       showBackButton
-      stepIndicator={{ current: 2, total: 2 }}
+      stepIndicator={{ current: 2, total: totalSteps }}
     >
       <View style={styles.container}>
         {/* Emblema animado de campana + vista previa de notificación */}

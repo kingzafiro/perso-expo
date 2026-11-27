@@ -8,6 +8,7 @@ import {
   FileText,
   LogOut,
   Palette,
+  Phone,
   QrCode,
   ShieldCheck,
   UserCog,
@@ -30,6 +31,7 @@ import {
   useMyDocumentRequests,
 } from "@/features/jobs/hooks/use-jobs";
 import { ProfileAvatar } from "@/features/profile/components/ProfileAvatar";
+import { useFullProfile } from "@/features/profile/hooks/use-full-profile";
 import { SettingsGroup, SettingsRow } from "@/features/settings/components/SettingsGroup";
 import { SettingsHeader } from "@/features/settings/components/SettingsHeader";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -68,6 +70,7 @@ export default function TuScreen() {
   const isDark = useColorScheme() === "dark";
   const theme = useTheme();
   const user = useAuthStore((state) => state.user);
+  const { data: fullProfile } = useFullProfile();
   const colorSchemePref = usePreferencesStore((state) => state.colorScheme);
   const syncEmployerFromServer = useEmployerStore(
     (state) => state.syncFromServer,
@@ -86,10 +89,16 @@ export default function TuScreen() {
     void syncEmployerFromServer();
   }, [syncEmployerFromServer]);
 
+  const profileUser = fullProfile?.usuario ?? user;
+  const phoneValue = (profileUser?.celular ?? "").trim();
+  const isPhoneVerified =
+    phoneValue.replace(/\D/g, "").length >= 10 &&
+    Boolean(profileUser?.celular_verificado);
+
   const displayName = getDisplayName(
-    user?.nombre,
-    user?.apellido_paterno,
-    user?.email,
+    profileUser?.nombre,
+    profileUser?.apellido_paterno,
+    profileUser?.email,
   );
   const initials = getInitials(displayName);
 
@@ -230,6 +239,20 @@ export default function TuScreen() {
             iconBgColor="#0A84FF"
             showDivider
             onPress={() => router.push("/(app)/tu/solicitudes")}
+          />
+
+          <SettingsRow
+            title="Número de teléfono"
+            subtitle={
+              isPhoneVerified
+                ? phoneValue
+                : "Verifica tu número por SMS para postularte"
+            }
+            value={isPhoneVerified ? "Verificado" : "Sin verificar"}
+            icon={<Phone size={18} color="#FFFFFF" />}
+            iconBgColor={isPhoneVerified ? "#34C759" : theme.primary}
+            showDivider
+            onPress={() => router.push("/(app)/tu/telefono")}
           />
 
           <SettingsRow

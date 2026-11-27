@@ -1,6 +1,7 @@
 import axios from "axios";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
+import { StatusBar } from "expo-status-bar";
 import {
   Briefcase,
   CalendarClock,
@@ -10,30 +11,53 @@ import {
   FileText,
   Globe,
   GraduationCap,
+  Keyboard,
   Mail,
   MapPin,
+  Maximize2,
+  Minimize2,
   Phone,
   QrCode,
+  RotateCcw,
   ScanLine,
   Search,
   UserCheck,
   X,
   XCircle,
+  Zap,
+  ZapOff,
 } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import {
   Alert,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, {
+  Defs,
+  LinearGradient,
+  Mask,
+  Path,
+  Rect,
+  Stop,
+} from "react-native-svg";
 
 import { AppButton } from "@/components/ui/AppButton";
 import { Spinner } from "@/components/ui/Spinner";
@@ -46,11 +70,12 @@ import {
   useLookupInterviewQr,
   useResolveInterviewQr,
 } from "../hooks/use-interviews";
-import type {
-  InterviewPass,
-  InterviewPassStatus,
-} from "../types/interviews.types";
+import type { InterviewPass } from "../types/interviews.types";
 import { ApplicantProfileModal } from "./ApplicantProfileModal";
+import {
+  EmployerInterviewRegistry,
+  getInterviewStatusColors,
+} from "./EmployerInterviewRegistry";
 
 interface EmployerInterviewsModalProps {
   visible: boolean;
@@ -58,31 +83,7 @@ interface EmployerInterviewsModalProps {
   onClose: () => void;
 }
 
-const STATUS_META: Record<
-  InterviewPassStatus,
-  { label: string; color: string; bg: string }
-> = {
-  pendiente: {
-    label: "Pendiente de acceso",
-    color: "#FF9F0A",
-    bg: "rgba(255, 159, 10, 0.14)",
-  },
-  aprobada: {
-    label: "Acceso aprobado",
-    color: "#34C759",
-    bg: "rgba(52, 199, 89, 0.14)",
-  },
-  rechazada: {
-    label: "Acceso rechazado",
-    color: "#FF3B30",
-    bg: "rgba(255, 59, 48, 0.14)",
-  },
-  cancelada: {
-    label: "Cancelada",
-    color: "#8E8E93",
-    bg: "rgba(142, 142, 147, 0.16)",
-  },
-};
+type ScannerMode = "fullscreen" | "simple";
 
 function extractErr(error: unknown, fallback: string) {
   if (axios.isAxiosError(error)) {
@@ -93,6 +94,270 @@ function extractErr(error: unknown, fallback: string) {
   return fallback;
 }
 
+interface QrViewfinderOverlayProps {
+  width: number;
+  height: number;
+  frameSize: number;
+  centerYOffset?: number;
+  primaryColor: string;
+  active: boolean;
+  isVerifying: boolean;
+  hintText: string;
+  compact?: boolean;
+}
+
+/**
+ * Máscara SVG con recorte redondeado real alrededor del recuadro central,
+ * esquinas vectoriales naranjas redondeadas y haz de escaneo animado.
+ */
+function QrViewfinderOverlay({
+  width,
+  height,
+  frameSize,
+  centerYOffset = 0,
+  primaryColor,
+  active,
+  isVerifying,
+  hintText,
+  compact = false,
+}: QrViewfinderOverlayProps) {
+  const laserProgress = useSharedValue(0);
+  const cornerPulse = useSharedValue(1);
+
+  useEffect(() => {
+    if (active && !isVerifying) {
+      laserProgress.value = 0;
+      laserProgress.value = withRepeat(
+        withTiming(1, {
+          duration: 2100,
+          easing: Easing.inOut(Easing.quad),
+        }),
+        -1,
+        true,
+      );
+      cornerPulse.value = withRepeat(
+        withTiming(0.76, {
+          duration: 1400,
+          easing: Easing.inOut(Easing.ease),
+        }),
+        -1,
+        true,
+      );
+    } else {
+      cancelAnimation(laserProgress);
+      cancelAnimation(cornerPulse);
+      cornerPulse.value = 1;
+    }
+
+    return () => {
+      cancelAnimation(laserProgress);
+      cancelAnimation(cornerPulse);
+    };
+  }, [active, isVerifying, laserProgress, cornerPulse]);
+
+  const radius = compact ? 20 : 26;
+  const x = Math.round((width - frameSize) / 2);
+  const y = Math.round((height - frameSize) / 2 + centerYOffset);
+  const travelDistance = Math.max(frameSize - 32, 60);
+
+  const laserAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: laserProgress.value * travelDistance }],
+  }));
+
+  const bracketAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: cornerPulse.value,
+  }));
+
+  // Esquinas vectoriales siguiendo exactamente el radio del recorte
+  const arm = compact ? 26 : 34;
+  const r = radius;
+  const stroke = compact ? 3.5 : 4.2;
+  const inset = stroke / 2;
+
+  const cornersPath = [
+    // Superior izquierda
+    `M ${inset} ${arm} L ${inset} ${r} Q ${inset} ${inset} ${r} ${inset} L ${arm} ${inset}`,
+    // Superior derecha
+    `M ${frameSize - arm} ${inset} L ${frameSize - r} ${inset} Q ${frameSize - inset} ${inset} ${frameSize - inset} ${r} L ${frameSize - inset} ${arm}`,
+    // Inferior izquierda
+    `M ${inset} ${frameSize - arm} L ${inset} ${frameSize - r} Q ${inset} ${frameSize - inset} ${r} ${frameSize - inset} L ${arm} ${frameSize - inset}`,
+    // Inferior derecha
+    `M ${frameSize - arm} ${frameSize - inset} L ${frameSize - r} ${frameSize - inset} Q ${frameSize - inset} ${frameSize - inset} ${frameSize - inset} ${frameSize - r} L ${frameSize - inset} ${frameSize - arm}`,
+  ].join(" ");
+
+  if (width <= 0 || height <= 0) return null;
+
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {/* Máscara oscura con recorte redondeado perfecto */}
+      <Svg width={width} height={height} style={StyleSheet.absoluteFill}>
+        <Defs>
+          <Mask id="qrCutoutMask">
+            <Rect width={width} height={height} fill="#FFFFFF" />
+            <Rect
+              x={x}
+              y={y}
+              width={frameSize}
+              height={frameSize}
+              rx={radius}
+              ry={radius}
+              fill="#000000"
+            />
+          </Mask>
+        </Defs>
+        <Rect
+          width={width}
+          height={height}
+          fill={compact ? "rgba(10, 8, 7, 0.62)" : "rgba(8, 6, 5, 0.72)"}
+          mask="url(#qrCutoutMask)"
+        />
+        {/* Borde sutil interior del recorte */}
+        <Rect
+          x={x}
+          y={y}
+          width={frameSize}
+          height={frameSize}
+          rx={radius}
+          ry={radius}
+          fill="none"
+          stroke="rgba(255, 255, 255, 0.16)"
+          strokeWidth={1}
+        />
+      </Svg>
+
+      {/* Esquinas naranjas vectoriales con pulso suave */}
+      <Animated.View
+        style={[
+          {
+            position: "absolute",
+            left: x,
+            top: y,
+            width: frameSize,
+            height: frameSize,
+          },
+          bracketAnimatedStyle,
+        ]}
+      >
+        <Svg width={frameSize} height={frameSize}>
+          <Path
+            d={cornersPath}
+            fill="none"
+            stroke={primaryColor}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      </Animated.View>
+
+      {/* Haz de escaneo naranja deslizándose dentro del recorte */}
+      {active && !isVerifying ? (
+        <View
+          style={{
+            position: "absolute",
+            left: x + 12,
+            top: y + 14,
+            width: frameSize - 24,
+            height: frameSize - 28,
+            overflow: "hidden",
+          }}
+        >
+          <Animated.View style={[styles.laserBeamWrap, laserAnimatedStyle]}>
+            <Svg width={frameSize - 24} height={26}>
+              <Defs>
+                <LinearGradient id="laserGlow" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0%" stopColor={primaryColor} stopOpacity="0" />
+                  <Stop
+                    offset="50%"
+                    stopColor={primaryColor}
+                    stopOpacity="0.34"
+                  />
+                  <Stop offset="100%" stopColor={primaryColor} stopOpacity="0" />
+                </LinearGradient>
+                <LinearGradient id="laserLine" x1="0" y1="0" x2="1" y2="0">
+                  <Stop offset="0%" stopColor={primaryColor} stopOpacity="0" />
+                  <Stop
+                    offset="18%"
+                    stopColor={primaryColor}
+                    stopOpacity="0.95"
+                  />
+                  <Stop offset="50%" stopColor="#FFB073" stopOpacity="1" />
+                  <Stop
+                    offset="82%"
+                    stopColor={primaryColor}
+                    stopOpacity="0.95"
+                  />
+                  <Stop offset="100%" stopColor={primaryColor} stopOpacity="0" />
+                </LinearGradient>
+              </Defs>
+              <Rect
+                x={0}
+                y={0}
+                width={frameSize - 24}
+                height={26}
+                fill="url(#laserGlow)"
+              />
+              <Rect
+                x={0}
+                y={12}
+                width={frameSize - 24}
+                height={2.2}
+                rx={1.1}
+                fill="url(#laserLine)"
+              />
+            </Svg>
+          </Animated.View>
+        </View>
+      ) : null}
+
+      {/* Estado de verificación dentro del recuadro */}
+      {isVerifying ? (
+        <View
+          style={[
+            styles.verifyingBox,
+            {
+              left: x,
+              top: y,
+              width: frameSize,
+              height: frameSize,
+              borderRadius: radius,
+            },
+          ]}
+        >
+          <Spinner size={28} strokeWidth={2.8} color="#FFFFFF" />
+          <Text style={styles.verifyingLabel}>Verificando pase...</Text>
+        </View>
+      ) : null}
+
+      {/* Indicador discreto debajo del recuadro */}
+      <View
+        style={[
+          styles.hintAnchor,
+          {
+            top: y + frameSize + (compact ? 12 : 20),
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.scanHintPill,
+            compact && styles.scanHintPillCompact,
+          ]}
+        >
+          <Text
+            style={[
+              styles.scanHintText,
+              compact && styles.scanHintTextCompact,
+            ]}
+          >
+            {hintText}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export function EmployerInterviewsModal({
   visible,
   initialTab = "scan",
@@ -101,8 +366,17 @@ export function EmployerInterviewsModal({
   const isDark = useColorScheme() === "dark";
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
   const [tab, setTab] = useState<"scan" | "registry">(initialTab);
+  const [scannerMode, setScannerMode] = useState<ScannerMode>("simple");
+  const [flashOn, setFlashOn] = useState(false);
+  const [manualDrawerOpen, setManualDrawerOpen] = useState(false);
+  const [compactCameraSize, setCompactCameraSize] = useState({
+    width: Math.max(screenWidth - 32, 280),
+    height: 256,
+  });
+  const [highlightId, setHighlightId] = useState<number | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [scannerLocked, setScannerLocked] = useState(false);
   const [manualCode, setManualCode] = useState("");
@@ -132,7 +406,11 @@ export function EmployerInterviewsModal({
       setScannerLocked(false);
       setVerifiedPass(null);
       setViewingProfile(null);
+      setHighlightId(null);
       setManualCode("");
+      setFlashOn(false);
+      setManualDrawerOpen(false);
+      setScannerMode("simple");
     }
   }, [visible, initialTab]);
 
@@ -146,6 +424,30 @@ export function EmployerInterviewsModal({
   const cardBorder = isDark
     ? "rgba(255, 255, 255, 0.08)"
     : "rgba(23, 18, 14, 0.08)";
+  const segmentBg = isDark
+    ? "rgba(255, 255, 255, 0.06)"
+    : "rgba(23, 18, 14, 0.055)";
+  const segmentActiveBg = isDark ? "#241F1C" : "#FFFFFF";
+  const rejectBorderColor = isDark
+    ? "rgba(252, 165, 165, 0.28)"
+    : "rgba(180, 35, 24, 0.22)";
+
+  const pendingCount = interviews.filter(
+    (item) => item.estado === "pendiente",
+  ).length;
+
+  const fullFrameSize = Math.min(Math.round(screenWidth * 0.68), 264);
+  const compactFrameSize = Math.min(
+    Math.round(compactCameraSize.height * 0.62),
+    164,
+  );
+
+  const canUseCamera = Platform.OS !== "web" && Boolean(permission?.granted);
+  const isImmersiveFullScreen =
+    tab === "scan" &&
+    scannerMode === "fullscreen" &&
+    !verifiedPass &&
+    canUseCamera;
 
   const handleManualRefresh = async () => {
     setManualRefreshing(true);
@@ -154,6 +456,27 @@ export function EmployerInterviewsModal({
     } finally {
       setManualRefreshing(false);
     }
+  };
+
+  const handleSwitchMode = (nextMode: ScannerMode) => {
+    if (nextMode === scannerMode) return;
+    if (Platform.OS !== "web") {
+      void Haptics.selectionAsync();
+    }
+    setManualDrawerOpen(false);
+    setScannerMode(nextMode);
+  };
+
+  const handleSwitchTab = (nextTab: "scan" | "registry") => {
+    if (nextTab === tab) return;
+    if (Platform.OS !== "web") {
+      void Haptics.selectionAsync();
+    }
+    if (nextTab === "registry") {
+      setFlashOn(false);
+      setManualDrawerOpen(false);
+    }
+    setTab(nextTab);
   };
 
   const handleLookupCode = async (raw: string) => {
@@ -169,6 +492,8 @@ export function EmployerInterviewsModal({
       }
       setVerifiedPass(found);
       setManualCode("");
+      setManualDrawerOpen(false);
+      setFlashOn(false);
     } catch (error) {
       if (Platform.OS !== "web") {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -225,53 +550,310 @@ export function EmployerInterviewsModal({
     }
   };
 
-  const pendingCount = interviews.filter(
-    (item) => item.estado === "pendiente",
-  ).length;
-
   const resumen = verifiedPass?.candidato_resumen ?? null;
+  const verifiedStatusMeta = verifiedPass
+    ? getInterviewStatusColors(verifiedPass.estado, theme)
+    : null;
 
   return (
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="pageSheet"
+      presentationStyle="fullScreen"
+      statusBarTranslucent
       onRequestClose={() => {
         if (viewingProfile) {
           setViewingProfile(null);
+        } else if (manualDrawerOpen) {
+          setManualDrawerOpen(false);
         } else {
           handleCloseAll();
         }
       }}
     >
+      <StatusBar
+        style={isImmersiveFullScreen ? "light" : isDark ? "light" : "dark"}
+      />
+
       {viewingProfile ? (
         <ApplicantProfileModal
           idPostulacion={viewingProfile.idPostulacion}
           idVacante={viewingProfile.idVacante}
           onBack={() => setViewingProfile(null)}
           onClose={handleCloseAll}
+          onOpenRegistry={(idEntrevista) => {
+            setViewingProfile(null);
+            setHighlightId(idEntrevista);
+            setTab("registry");
+          }}
         />
+      ) : isImmersiveFullScreen ? (
+        /* ================================================================
+           MODO PANTALLA COMPLETA INMERSIVO (ESTILO APPLE / EVENTBRITE)
+           - 1 sola barra superior minimalista (sin apilar 2 barras arriba)
+           - Recorte SVG redondeado real con esquinas naranjas y láser animado
+           - Dock inferior flotante al alcance del pulgar
+           ================================================================ */
+        <View style={styles.fullCameraRoot}>
+          <CameraView
+            style={StyleSheet.absoluteFill}
+            facing="back"
+            enableTorch={flashOn}
+            barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+            onBarcodeScanned={
+              scannerLocked || manualDrawerOpen
+                ? undefined
+                : (event) => {
+                    if (event.data) {
+                      void handleLookupCode(event.data);
+                    }
+                  }
+            }
+          />
+
+          <QrViewfinderOverlay
+            width={screenWidth}
+            height={screenHeight}
+            frameSize={fullFrameSize}
+            centerYOffset={-32}
+            primaryColor={theme.primary}
+            active={!scannerLocked && !manualDrawerOpen}
+            isVerifying={lookupQr.isPending}
+            hintText="Apunta al pase QR del candidato"
+          />
+
+          {/* Barra superior única y despejada */}
+          <View
+            style={[
+              styles.hudTopBar,
+              { paddingTop: Math.max(insets.top + 8, 20) },
+            ]}
+          >
+            <Pressable
+              onPress={handleCloseAll}
+              accessibilityLabel="Cerrar escáner QR"
+              style={({ pressed }) => [
+                styles.hudIconBtn,
+                pressed && styles.pressed,
+              ]}
+            >
+              <X size={20} color="#FFFFFF" />
+            </Pressable>
+
+            <Text style={styles.hudTitle}>Registrar QR</Text>
+
+            <View style={styles.hudRightActions}>
+              <Pressable
+                onPress={() => {
+                  if (Platform.OS !== "web") void Haptics.selectionAsync();
+                  setFlashOn((prev) => !prev);
+                }}
+                accessibilityLabel={
+                  flashOn ? "Apagar linterna" : "Encender linterna"
+                }
+                style={({ pressed }) => [
+                  styles.hudIconBtn,
+                  flashOn && {
+                    backgroundColor: theme.primary,
+                    borderColor: theme.primary,
+                  },
+                  pressed && styles.pressed,
+                ]}
+              >
+                {flashOn ? (
+                  <Zap size={18} color="#FFFFFF" />
+                ) : (
+                  <ZapOff size={18} color="#FFFFFF" />
+                )}
+              </Pressable>
+
+              <Pressable
+                onPress={() => handleSwitchMode("simple")}
+                accessibilityLabel="Volver a vista compacta"
+                style={({ pressed }) => [
+                  styles.hudIconBtn,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Minimize2 size={18} color="#FFFFFF" />
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Dock inferior flotante (zona natural del pulgar) */}
+          {!manualDrawerOpen ? (
+            <View
+              style={[
+                styles.hudBottomDock,
+                { paddingBottom: Math.max(insets.bottom + 16, 26) },
+              ]}
+            >
+              <Pressable
+                onPress={() => {
+                  if (Platform.OS !== "web") void Haptics.selectionAsync();
+                  setManualDrawerOpen(true);
+                }}
+                style={({ pressed }) => [
+                  styles.hudManualChip,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Keyboard size={15} color="#FFFFFF" />
+                <Text style={styles.hudManualChipText}>Código manual</Text>
+              </Pressable>
+
+              <View style={styles.hudSegmentTrack}>
+                <Pressable
+                  onPress={() => handleSwitchTab("scan")}
+                  style={[
+                    styles.hudSegmentOption,
+                    { backgroundColor: theme.primary },
+                  ]}
+                >
+                  <ScanLine size={15} color="#FFFFFF" />
+                  <Text style={styles.hudSegmentTextActive}>Escanear</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => handleSwitchTab("registry")}
+                  style={styles.hudSegmentOption}
+                >
+                  <ClipboardList size={15} color="rgba(255,255,255,0.84)" />
+                  <Text style={styles.hudSegmentText}>Registro</Text>
+                  {pendingCount > 0 ? (
+                    <View
+                      style={[
+                        styles.hudPendingBadge,
+                        { backgroundColor: theme.primary },
+                      ]}
+                    >
+                      <Text style={styles.hudPendingBadgeText}>
+                        {pendingCount}
+                      </Text>
+                    </View>
+                  ) : interviews.length > 0 ? (
+                    <Text style={styles.hudTotalMuted}>
+                      ({interviews.length})
+                    </Text>
+                  ) : null}
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            /* Drawer limpio para ingresar código manual sobre el teclado */
+            <KeyboardAvoidingView
+              style={styles.manualOverlay}
+              behavior={Platform.OS === "ios" ? "padding" : undefined}
+            >
+              <Pressable
+                style={StyleSheet.absoluteFill}
+                onPress={() => setManualDrawerOpen(false)}
+              />
+              <View
+                style={[
+                  styles.manualSheet,
+                  { paddingBottom: Math.max(insets.bottom + 18, 26) },
+                ]}
+              >
+                <View style={styles.manualSheetGrabber} />
+                <View style={styles.manualSheetHeader}>
+                  <View style={styles.flexOne}>
+                    <Text style={styles.manualSheetTitle}>
+                      Validar por código manual
+                    </Text>
+                    <Text style={styles.manualSheetSub}>
+                      Escribe el código que aparece debajo del QR del candidato
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() => setManualDrawerOpen(false)}
+                    style={styles.hudIconBtnSmall}
+                  >
+                    <X size={16} color="#FFFFFF" />
+                  </Pressable>
+                </View>
+
+                <View style={styles.manualRow}>
+                  <View style={styles.camManualInputWrap}>
+                    <Search size={16} color="rgba(255,255,255,0.58)" />
+                    <TextInput
+                      value={manualCode}
+                      onChangeText={setManualCode}
+                      placeholder="Código del pase"
+                      placeholderTextColor="rgba(255,255,255,0.42)"
+                      autoCapitalize="characters"
+                      autoCorrect={false}
+                      autoFocus
+                      style={styles.camManualInput}
+                      onSubmitEditing={() => void handleLookupCode(manualCode)}
+                    />
+                    {manualCode.length > 0 ? (
+                      <Pressable
+                        onPress={() => setManualCode("")}
+                        hitSlop={8}
+                      >
+                        <X size={15} color="rgba(255,255,255,0.55)" />
+                      </Pressable>
+                    ) : null}
+                  </View>
+
+                  <Pressable
+                    disabled={
+                      manualCode.trim().length < 4 || lookupQr.isPending
+                    }
+                    onPress={() => void handleLookupCode(manualCode)}
+                    style={({ pressed }) => [
+                      styles.verifyManualBtn,
+                      {
+                        backgroundColor: theme.primary,
+                        opacity: manualCode.trim().length < 4 ? 0.45 : 1,
+                      },
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    {lookupQr.isPending ? (
+                      <Spinner size={18} strokeWidth={2.4} color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.verifyManualText}>Validar</Text>
+                    )}
+                  </Pressable>
+                </View>
+              </View>
+            </KeyboardAvoidingView>
+          )}
+        </View>
       ) : (
+        /* ================================================================
+           MODO SENCILLO, FICHA VERIFICADA O PESTAÑA DE REGISTRO
+           - Cabecera única limpia con botón directo a Pantalla completa
+           - Control segmentado uniforme con Mis entrevistas / Tus entrevistas
+           ================================================================ */
         <View style={[styles.container, { backgroundColor: sheetBg }]}>
           <View
             style={[
               styles.header,
               {
-                paddingTop: Math.max(insets.top, 18),
+                paddingTop: Math.max(insets.top + 8, 18),
                 borderBottomColor: theme.inputBorder,
               },
             ]}
           >
             <View style={styles.flexOne}>
               <Text style={[styles.title, { color: theme.text }]}>
-                Entrevistas y Pase QR
+                Registrar QR
               </Text>
               <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-                Verifica la identidad del candidato y abre su perfil y CV
+                {tab === "scan"
+                  ? verifiedPass
+                    ? "Confirma la identidad antes de aprobar"
+                    : "Escanea el pase o ingresa el código manual"
+                  : "Aprueba o rechaza accesos desde el registro"}
               </Text>
             </View>
+
             <Pressable
               onPress={handleCloseAll}
+              accessibilityLabel="Cerrar"
               style={[
                 styles.closeBtn,
                 { backgroundColor: theme.inputBackground },
@@ -281,35 +863,34 @@ export function EmployerInterviewsModal({
             </Pressable>
           </View>
 
-          {/* Selector de pestañas */}
-          <View style={styles.tabsWrap}>
+          {/* Selector segmentado uniforme con el resto de la app */}
+          <View style={styles.segmentOuter}>
             <View
               style={[
-                styles.tabsBar,
-                {
-                  backgroundColor: cardBg,
-                  borderColor: cardBorder,
-                },
+                styles.segmentTrack,
+                { backgroundColor: segmentBg, borderColor: cardBorder },
               ]}
             >
               <Pressable
-                onPress={() => {
-                  setTab("scan");
-                  if (Platform.OS !== "web") void Haptics.selectionAsync();
-                }}
+                onPress={() => handleSwitchTab("scan")}
                 style={[
-                  styles.tabBtn,
-                  tab === "scan" && { backgroundColor: theme.primary },
+                  styles.segmentOption,
+                  tab === "scan" && [
+                    styles.segmentOptionActive,
+                    { backgroundColor: segmentActiveBg },
+                  ],
                 ]}
               >
                 <ScanLine
                   size={15}
-                  color={tab === "scan" ? "#FFFFFF" : theme.textSecondary}
+                  color={tab === "scan" ? theme.primary : theme.textSecondary}
                 />
                 <Text
                   style={[
-                    styles.tabText,
-                    { color: tab === "scan" ? "#FFFFFF" : theme.text },
+                    styles.segmentLabel,
+                    {
+                      color: tab === "scan" ? theme.text : theme.textSecondary,
+                    },
                   ]}
                 >
                   Escanear QR
@@ -317,27 +898,57 @@ export function EmployerInterviewsModal({
               </Pressable>
 
               <Pressable
-                onPress={() => {
-                  setTab("registry");
-                  if (Platform.OS !== "web") void Haptics.selectionAsync();
-                }}
+                onPress={() => handleSwitchTab("registry")}
                 style={[
-                  styles.tabBtn,
-                  tab === "registry" && { backgroundColor: theme.primary },
+                  styles.segmentOption,
+                  tab === "registry" && [
+                    styles.segmentOptionActive,
+                    { backgroundColor: segmentActiveBg },
+                  ],
                 ]}
               >
                 <ClipboardList
                   size={15}
-                  color={tab === "registry" ? "#FFFFFF" : theme.textSecondary}
+                  color={
+                    tab === "registry" ? theme.primary : theme.textSecondary
+                  }
                 />
                 <Text
                   style={[
-                    styles.tabText,
-                    { color: tab === "registry" ? "#FFFFFF" : theme.text },
+                    styles.segmentLabel,
+                    {
+                      color:
+                        tab === "registry" ? theme.text : theme.textSecondary,
+                    },
                   ]}
                 >
-                  Registro ({interviews.length})
+                  Registro
                 </Text>
+                <View
+                  style={[
+                    styles.segmentCountPill,
+                    {
+                      backgroundColor:
+                        tab === "registry" || pendingCount > 0
+                          ? theme.primarySoft
+                          : theme.inputBackground,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.segmentCountText,
+                      {
+                        color:
+                          tab === "registry" || pendingCount > 0
+                            ? theme.primary
+                            : theme.textSecondary,
+                      },
+                    ]}
+                  >
+                    {interviews.length}
+                  </Text>
+                </View>
               </Pressable>
             </View>
           </View>
@@ -347,71 +958,47 @@ export function EmployerInterviewsModal({
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={[
                 styles.content,
-                { paddingBottom: Math.max(insets.bottom + 24, 36) },
+                { paddingBottom: Math.max(insets.bottom + 26, 38) },
               ]}
               showsVerticalScrollIndicator={false}
             >
-              {verifiedPass ? (
-                /* Ficha de verificación de identidad del candidato escaneado */
-                <View style={styles.verifiedStack}>
+              {verifiedPass && verifiedStatusMeta ? (
+                /* Ficha VIP de verificación de identidad */
+                <View
+                  style={[
+                    styles.verifiedCard,
+                    { backgroundColor: cardBg, borderColor: cardBorder },
+                  ]}
+                >
+                  {/* Banda superior de estado acorde al tema */}
                   <View
                     style={[
-                      styles.card,
-                      { backgroundColor: cardBg, borderColor: cardBorder },
+                      styles.verdictBar,
+                      { backgroundColor: verifiedStatusMeta.bg },
                     ]}
                   >
-                    <View style={styles.verifiedTopRow}>
-                      <View style={styles.inlineRow}>
-                        <UserCheck size={14} color={theme.primary} />
-                        <Text
-                          style={[
-                            styles.verifiedEyebrow,
-                            { color: theme.primary },
-                          ]}
-                        >
-                          VERIFICAR IDENTIDAD
-                        </Text>
-                      </View>
-                      <View
-                        style={[
-                          styles.statusBadge,
-                          {
-                            backgroundColor: (
-                              STATUS_META[verifiedPass.estado] ??
-                              STATUS_META.pendiente
-                            ).bg,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.statusBadgeText,
-                            {
-                              color: (
-                                STATUS_META[verifiedPass.estado] ??
-                                STATUS_META.pendiente
-                              ).color,
-                            },
-                          ]}
-                        >
-                          {
-                            (
-                              STATUS_META[verifiedPass.estado] ??
-                              STATUS_META.pendiente
-                            ).label
-                          }
-                        </Text>
-                      </View>
-                    </View>
+                    <UserCheck size={15} color={verifiedStatusMeta.color} />
+                    <Text
+                      style={[
+                        styles.verdictText,
+                        { color: verifiedStatusMeta.color },
+                      ]}
+                    >
+                      {verifiedPass.estado === "pendiente"
+                        ? "Pase válido · Verifica la identidad"
+                        : verifiedStatusMeta.label}
+                    </Text>
+                  </View>
 
-                    {/* Foto grande y nombre para confirmar visualmente al candidato */}
+                  <View style={styles.verifiedBody}>
+                    {/* Avatar limpio sin borde + nombre + vacante + cita */}
                     <View style={styles.identityHero}>
                       <ProfileAvatar
                         uri={verifiedPass.candidato?.foto_perfil}
                         initials={(verifiedPass.candidato?.nombre || "C")
                           .slice(0, 2)
                           .toUpperCase()}
-                        size={76}
+                        size={84}
                       />
                       <Text
                         style={[styles.heroName, { color: theme.text }]}
@@ -426,27 +1013,33 @@ export function EmployerInterviewsModal({
                         ]}
                         numberOfLines={2}
                       >
-                        Postulado a{" "}
-                        <Text style={{ color: theme.text, fontWeight: "700" }}>
-                          {verifiedPass.vacante?.titulo || "Vacante"}
-                        </Text>
+                        {verifiedPass.vacante?.titulo || "Entrevista presencial"}
                       </Text>
-                      <View
-                        style={[
-                          styles.codePill,
-                          { backgroundColor: theme.primarySoft },
-                        ]}
-                      >
-                        <QrCode size={13} color={theme.primary} />
-                        <Text
-                          style={[styles.codeTag, { color: theme.primary }]}
+
+                      {verifiedPass.fecha_hora ? (
+                        <View
+                          style={[
+                            styles.appointmentPill,
+                            {
+                              backgroundColor: theme.inputBackground,
+                              borderColor: theme.inputBorder,
+                            },
+                          ]}
                         >
-                          {verifiedPass.codigo_corto}
-                        </Text>
-                      </View>
+                          <CalendarClock size={13} color={theme.primary} />
+                          <Text
+                            style={[
+                              styles.appointmentPillText,
+                              { color: theme.text },
+                            ]}
+                          >
+                            {verifiedPass.fecha_hora}
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
 
-                    {/* Datos clave de contacto y perfil para validar que sí es el postulado */}
+                    {/* Datos de validación rápida */}
                     <View
                       style={[
                         styles.detailsBox,
@@ -544,7 +1137,7 @@ export function EmployerInterviewsModal({
                         <FileText
                           size={14}
                           color={
-                            resumen?.cv_subido ? "#34C759" : theme.textMuted
+                            resumen?.cv_subido ? theme.success : theme.textMuted
                           }
                         />
                         <Text
@@ -552,7 +1145,7 @@ export function EmployerInterviewsModal({
                             styles.detailText,
                             {
                               color: resumen?.cv_subido
-                                ? "#34C759"
+                                ? theme.success
                                 : theme.textSecondary,
                               fontWeight: resumen?.cv_subido ? "700" : "500",
                             },
@@ -565,21 +1158,7 @@ export function EmployerInterviewsModal({
                       </View>
                     </View>
 
-                    {verifiedPass.fecha_hora ? (
-                      <View style={styles.infoLine}>
-                        <CalendarClock size={14} color={theme.textSecondary} />
-                        <Text
-                          style={[
-                            styles.infoText,
-                            { color: theme.textSecondary },
-                          ]}
-                        >
-                          Cita: {verifiedPass.fecha_hora}
-                        </Text>
-                      </View>
-                    ) : null}
-
-                    {/* Acciones según estado */}
+                    {/* Acciones ergonómicas con colores armónicos del tema */}
                     {verifiedPass.estado === "pendiente" ? (
                       <View style={styles.actionsStack}>
                         <Pressable
@@ -589,6 +1168,7 @@ export function EmployerInterviewsModal({
                           }
                           style={({ pressed }) => [
                             styles.approvePrimaryBtn,
+                            { backgroundColor: theme.primary },
                             pressed && styles.pressed,
                           ]}
                         >
@@ -609,32 +1189,68 @@ export function EmployerInterviewsModal({
                           )}
                         </Pressable>
 
-                        <Pressable
-                          disabled={resolvingId === verifiedPass.id_entrevista}
-                          onPress={() =>
-                            void handleResolve(verifiedPass, "rechazar", false)
-                          }
-                          style={({ pressed }) => [
-                            styles.rejectOutlineBtn,
-                            pressed && styles.pressed,
-                          ]}
-                        >
-                          {resolvingId === verifiedPass.id_entrevista &&
-                          resolvingAction === "rechazar" ? (
-                            <Spinner
-                              size={18}
-                              strokeWidth={2.4}
-                              color="#FF3B30"
-                            />
-                          ) : (
-                            <>
-                              <XCircle size={17} color="#FF3B30" />
-                              <Text style={styles.rejectOutlineText}>
-                                Rechazar acceso
-                              </Text>
-                            </>
-                          )}
-                        </Pressable>
+                        <View style={styles.secondaryActionsRow}>
+                          <Pressable
+                            disabled={resolvingId === verifiedPass.id_entrevista}
+                            onPress={() =>
+                              void handleResolve(verifiedPass, "rechazar", false)
+                            }
+                            style={({ pressed }) => [
+                              styles.rejectHalfBtn,
+                              {
+                                backgroundColor: theme.errorSoft,
+                                borderColor: rejectBorderColor,
+                              },
+                              pressed && styles.pressed,
+                            ]}
+                          >
+                            {resolvingId === verifiedPass.id_entrevista &&
+                            resolvingAction === "rechazar" ? (
+                              <Spinner
+                                size={17}
+                                strokeWidth={2.4}
+                                color={theme.error}
+                              />
+                            ) : (
+                              <>
+                                <XCircle size={16} color={theme.error} />
+                                <Text
+                                  style={[
+                                    styles.rejectHalfText,
+                                    { color: theme.error },
+                                  ]}
+                                >
+                                  Rechazar
+                                </Text>
+                              </>
+                            )}
+                          </Pressable>
+
+                          <Pressable
+                            onPress={() => {
+                              setVerifiedPass(null);
+                              setScannerLocked(false);
+                            }}
+                            style={({ pressed }) => [
+                              styles.rescanHalfBtn,
+                              {
+                                backgroundColor: theme.inputBackground,
+                                borderColor: theme.inputBorder,
+                              },
+                              pressed && styles.pressed,
+                            ]}
+                          >
+                            <RotateCcw size={15} color={theme.text} />
+                            <Text
+                              style={[
+                                styles.rescanHalfText,
+                                { color: theme.text },
+                              ]}
+                            >
+                              Escanear otro
+                            </Text>
+                          </Pressable>
+                        </View>
                       </View>
                     ) : (
                       <View style={styles.actionsStack}>
@@ -647,22 +1263,21 @@ export function EmployerInterviewsModal({
                             })
                           }
                         />
+                        <AppButton
+                          title="Escanear otro QR"
+                          variant="secondary"
+                          onPress={() => {
+                            setVerifiedPass(null);
+                            setScannerLocked(false);
+                          }}
+                        />
                       </View>
                     )}
-
-                    <AppButton
-                      title="Escanear otro QR"
-                      variant="secondary"
-                      onPress={() => {
-                        setVerifiedPass(null);
-                        setScannerLocked(false);
-                      }}
-                    />
                   </View>
                 </View>
               ) : (
                 <>
-                  {/* Cámara escáner QR */}
+                  {/* Cámara compacta en modo Sencillo con máscara SVG y láser */}
                   <View
                     style={[
                       styles.scannerCard,
@@ -671,7 +1286,14 @@ export function EmployerInterviewsModal({
                   >
                     {Platform.OS === "web" ? (
                       <View style={styles.permBox}>
-                        <QrCode size={28} color={theme.primary} />
+                        <View
+                          style={[
+                            styles.permIconCircle,
+                            { backgroundColor: theme.primarySoft },
+                          ]}
+                        >
+                          <QrCode size={26} color={theme.primary} />
+                        </View>
                         <Text style={[styles.permTitle, { color: theme.text }]}>
                           Usa la app móvil para escanear con cámara
                         </Text>
@@ -681,15 +1303,21 @@ export function EmployerInterviewsModal({
                             { color: theme.textSecondary },
                           ]}
                         >
-                          También puedes ingresar el código corto debajo (ej.
-                          PRS-8A4C1F).
+                          También puedes validar el código del pase debajo.
                         </Text>
                       </View>
                     ) : !permission?.granted ? (
                       <View style={styles.permBox}>
-                        <QrCode size={28} color={theme.primary} />
+                        <View
+                          style={[
+                            styles.permIconCircle,
+                            { backgroundColor: theme.primarySoft },
+                          ]}
+                        >
+                          <QrCode size={26} color={theme.primary} />
+                        </View>
                         <Text style={[styles.permTitle, { color: theme.text }]}>
-                          Activa la cámara para escanear pases QR
+                          Activa tu cámara para escanear QR
                         </Text>
                         <Text
                           style={[
@@ -697,21 +1325,32 @@ export function EmployerInterviewsModal({
                             { color: theme.textSecondary },
                           ]}
                         >
-                          Apunta al código QR que presenta el candidato para
-                          validar su identidad y ver su perfil y CV.
+                          Apunta al pase QR del candidato para confirmar su
+                          identidad en segundos.
                         </Text>
-                        <AppButton
-                          title="Permitir cámara"
-                          onPress={async () => {
-                            await requestPermission();
-                          }}
-                        />
+                        <View style={styles.permBtnWrap}>
+                          <AppButton
+                            title="Permitir cámara"
+                            onPress={async () => {
+                              await requestPermission();
+                            }}
+                          />
+                        </View>
                       </View>
                     ) : (
-                      <View style={styles.cameraWrap}>
+                      <View
+                        style={styles.compactCameraWrap}
+                        onLayout={(event) => {
+                          const { width, height } = event.nativeEvent.layout;
+                          if (width > 0 && height > 0) {
+                            setCompactCameraSize({ width, height });
+                          }
+                        }}
+                      >
                         <CameraView
-                          style={styles.camera}
+                          style={StyleSheet.absoluteFill}
                           facing="back"
+                          enableTorch={flashOn}
                           barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
                           onBarcodeScanned={
                             scannerLocked
@@ -723,40 +1362,76 @@ export function EmployerInterviewsModal({
                                 }
                           }
                         />
-                        <View pointerEvents="none" style={styles.cameraOverlay}>
-                          <View
-                            style={[
-                              styles.scanFrame,
-                              { borderColor: theme.primary },
+
+                        <QrViewfinderOverlay
+                          width={compactCameraSize.width}
+                          height={compactCameraSize.height}
+                          frameSize={compactFrameSize}
+                          centerYOffset={-12}
+                          primaryColor={theme.primary}
+                          active={!scannerLocked}
+                          isVerifying={lookupQr.isPending}
+                          hintText="Encuadra el pase QR"
+                          compact
+                        />
+
+                        {/* Controles limpios en esquina superior derecha */}
+                        <View style={styles.compactCamControls}>
+                          <Pressable
+                            onPress={() => {
+                              if (Platform.OS !== "web") {
+                                void Haptics.selectionAsync();
+                              }
+                              setFlashOn((prev) => !prev);
+                            }}
+                            accessibilityLabel={
+                              flashOn ? "Apagar linterna" : "Encender linterna"
+                            }
+                            style={({ pressed }) => [
+                              styles.compactCamBtn,
+                              flashOn && {
+                                backgroundColor: theme.primary,
+                                borderColor: theme.primary,
+                              },
+                              pressed && styles.pressed,
                             ]}
-                          />
-                          <Text style={styles.scanHint}>
-                            Encuadra el Pase QR del postulante
-                          </Text>
+                          >
+                            {flashOn ? (
+                              <Zap size={16} color="#FFFFFF" />
+                            ) : (
+                              <ZapOff size={16} color="#FFFFFF" />
+                            )}
+                          </Pressable>
+
+                          <Pressable
+                            onPress={() => handleSwitchMode("fullscreen")}
+                            accessibilityLabel="Abrir en pantalla completa"
+                            style={({ pressed }) => [
+                              styles.compactCamBtn,
+                              pressed && styles.pressed,
+                            ]}
+                          >
+                            <Maximize2 size={16} color="#FFFFFF" />
+                          </Pressable>
                         </View>
-                        {lookupQr.isPending ? (
-                          <View style={styles.scanningOverlay}>
-                            <Spinner
-                              size={28}
-                              strokeWidth={2.8}
-                              color="#FFFFFF"
-                            />
-                          </View>
-                        ) : null}
                       </View>
                     )}
                   </View>
 
-                  {/* Entrada manual de código */}
+                  {/* Tarjeta limpia para código manual */}
                   <View
                     style={[
                       styles.card,
                       { backgroundColor: cardBg, borderColor: cardBorder },
                     ]}
                   >
-                    <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                      Validar por código manual
-                    </Text>
+                    <View style={styles.manualHeaderRow}>
+                      <Keyboard size={16} color={theme.primary} />
+                      <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                        Validar por código manual
+                      </Text>
+                    </View>
+
                     <View style={styles.manualRow}>
                       <View
                         style={[
@@ -771,7 +1446,7 @@ export function EmployerInterviewsModal({
                         <TextInput
                           value={manualCode}
                           onChangeText={setManualCode}
-                          placeholder="Ej. PRS-8A4C1F"
+                          placeholder="Código del pase"
                           placeholderTextColor={theme.textMuted}
                           autoCapitalize="characters"
                           autoCorrect={false}
@@ -780,6 +1455,14 @@ export function EmployerInterviewsModal({
                             void handleLookupCode(manualCode)
                           }
                         />
+                        {manualCode.length > 0 ? (
+                          <Pressable
+                            onPress={() => setManualCode("")}
+                            hitSlop={8}
+                          >
+                            <X size={15} color={theme.textMuted} />
+                          </Pressable>
+                        ) : null}
                       </View>
                       <Pressable
                         disabled={
@@ -807,248 +1490,81 @@ export function EmployerInterviewsModal({
                       </Pressable>
                     </View>
                   </View>
+
+                  {/* Acceso rápido a pendientes si existen */}
+                  {pendingCount > 0 ? (
+                    <Pressable
+                      onPress={() => handleSwitchTab("registry")}
+                      style={({ pressed }) => [
+                        styles.pendingJumpCard,
+                        {
+                          backgroundColor: cardBg,
+                          borderColor: theme.primaryBorder,
+                        },
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.pendingJumpBadge,
+                          { backgroundColor: theme.primarySoft },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.pendingJumpCount,
+                            { color: theme.primary },
+                          ]}
+                        >
+                          {pendingCount}
+                        </Text>
+                      </View>
+                      <View style={styles.flexOne}>
+                        <Text
+                          style={[
+                            styles.pendingJumpTitle,
+                            { color: theme.text },
+                          ]}
+                        >
+                          {pendingCount === 1
+                            ? "1 entrevista pendiente por confirmar"
+                            : `${pendingCount} entrevistas pendientes por confirmar`}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.pendingJumpSub,
+                            { color: theme.textSecondary },
+                          ]}
+                        >
+                          Toca para abrir el registro
+                        </Text>
+                      </View>
+                      <ChevronRight size={17} color={theme.primary} />
+                    </Pressable>
+                  ) : null}
                 </>
               )}
             </ScrollView>
           ) : (
-            /* Pestaña 2: Registro completo de QRs de entrevistas */
-            <ScrollView
-              contentContainerStyle={[
-                styles.content,
-                { paddingBottom: Math.max(insets.bottom + 24, 36) },
-              ]}
-              showsVerticalScrollIndicator={false}
-              refreshControl={
-                <RefreshControl
-                  refreshing={manualRefreshing}
-                  onRefresh={() => void handleManualRefresh()}
-                  tintColor={theme.primary}
-                />
+            /* Pestaña 2: Registro tipo boleto (con Aprobar y ver / Rechazar) */
+            <EmployerInterviewRegistry
+              interviews={interviews}
+              isLoading={isLoading}
+              refreshing={manualRefreshing}
+              screenBg={sheetBg}
+              bottomPadding={Math.max(insets.bottom + 24, 36)}
+              highlightInterviewId={highlightId}
+              allowResolve
+              resolvingId={resolvingId}
+              resolvingAction={resolvingAction}
+              onRefresh={() => void handleManualRefresh()}
+              onResolve={(pass, accion, openProfile) =>
+                void handleResolve(pass, accion, openProfile)
               }
-            >
-              {isLoading ? (
-                <View style={styles.loaderBox}>
-                  <Spinner size={26} strokeWidth={2.6} color={theme.primary} />
-                </View>
-              ) : interviews.length === 0 ? (
-                <View
-                  style={[
-                    styles.emptyCard,
-                    { backgroundColor: cardBg, borderColor: cardBorder },
-                  ]}
-                >
-                  <QrCode size={26} color={theme.primary} />
-                  <Text style={[styles.permTitle, { color: theme.text }]}>
-                    Aún no has generado pases QR
-                  </Text>
-                  <Text
-                    style={[styles.permDesc, { color: theme.textSecondary }]}
-                  >
-                    Entra al perfil de un postulante y toca “Agendar entrevista
-                    y enviar QR” para enviarle la ubicación y foto de tu
-                    oficina.
-                  </Text>
-                </View>
-              ) : (
-                <>
-                  <Text
-                    style={[
-                      styles.registryHint,
-                      { color: theme.textSecondary },
-                    ]}
-                  >
-                    {pendingCount} pendiente{pendingCount === 1 ? "" : "s"} de
-                    verificación · {interviews.length} en total
-                  </Text>
-
-                  {interviews.map((item) => {
-                    const meta =
-                      STATUS_META[item.estado] ?? STATUS_META.pendiente;
-                    const isBusy = resolvingId === item.id_entrevista;
-
-                    return (
-                      <View
-                        key={item.id_entrevista}
-                        style={[
-                          styles.card,
-                          { backgroundColor: cardBg, borderColor: cardBorder },
-                        ]}
-                      >
-                        <Pressable
-                          onPress={() =>
-                            setViewingProfile({
-                              idPostulacion: item.id_postulacion,
-                              idVacante: item.id_vacante,
-                            })
-                          }
-                          style={({ pressed }) => [
-                            styles.candidateRow,
-                            pressed && styles.pressed,
-                          ]}
-                        >
-                          <ProfileAvatar
-                            uri={item.candidato?.foto_perfil}
-                            initials={(item.candidato?.nombre || "C")
-                              .slice(0, 2)
-                              .toUpperCase()}
-                            size={44}
-                          />
-                          <View style={styles.flexOne}>
-                            <Text
-                              style={[
-                                styles.regCandidateName,
-                                { color: theme.text },
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {item.candidato?.nombre || "Candidato"}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.candidateSub,
-                                { color: theme.textSecondary },
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {item.vacante?.titulo || "Vacante"}
-                            </Text>
-                          </View>
-                          <View
-                            style={[
-                              styles.statusBadge,
-                              { backgroundColor: meta.bg },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.statusBadgeText,
-                                { color: meta.color },
-                              ]}
-                            >
-                              {meta.label}
-                            </Text>
-                          </View>
-                        </Pressable>
-
-                        <View style={styles.regMetaRow}>
-                          <Text
-                            style={[styles.codeTag, { color: theme.primary }]}
-                          >
-                            QR: {item.codigo_corto}
-                          </Text>
-                          {item.fecha_hora ? (
-                            <Text
-                              style={[
-                                styles.infoText,
-                                { color: theme.textSecondary },
-                              ]}
-                              numberOfLines={1}
-                            >
-                              · {item.fecha_hora}
-                            </Text>
-                          ) : null}
-                        </View>
-
-                        <View style={styles.infoLine}>
-                          <MapPin size={13} color={theme.textSecondary} />
-                          <Text
-                            style={[
-                              styles.infoText,
-                              { color: theme.textSecondary },
-                            ]}
-                            numberOfLines={2}
-                          >
-                            {item.direccion_oficina}
-                          </Text>
-                        </View>
-
-                        <View style={styles.regFooterRow}>
-                          {item.estado === "pendiente" ? (
-                            <View style={styles.decisionRow}>
-                              <Pressable
-                                disabled={isBusy}
-                                onPress={() =>
-                                  void handleResolve(item, "aprobar", true)
-                                }
-                                style={({ pressed }) => [
-                                  styles.approveBtnSmall,
-                                  pressed && styles.pressed,
-                                ]}
-                              >
-                                {isBusy && resolvingAction === "aprobar" ? (
-                                  <Spinner
-                                    size={16}
-                                    strokeWidth={2.2}
-                                    color="#FFFFFF"
-                                  />
-                                ) : (
-                                  <>
-                                    <CheckCircle2 size={15} color="#FFFFFF" />
-                                    <Text style={styles.decisionSmallText}>
-                                      Aprobar y ver
-                                    </Text>
-                                  </>
-                                )}
-                              </Pressable>
-
-                              <Pressable
-                                disabled={isBusy}
-                                onPress={() =>
-                                  void handleResolve(item, "rechazar", false)
-                                }
-                                style={({ pressed }) => [
-                                  styles.rejectBtnSmall,
-                                  pressed && styles.pressed,
-                                ]}
-                              >
-                                {isBusy && resolvingAction === "rechazar" ? (
-                                  <Spinner
-                                    size={16}
-                                    strokeWidth={2.2}
-                                    color="#FFFFFF"
-                                  />
-                                ) : (
-                                  <>
-                                    <XCircle size={15} color="#FFFFFF" />
-                                    <Text style={styles.decisionSmallText}>
-                                      Rechazar
-                                    </Text>
-                                  </>
-                                )}
-                              </Pressable>
-                            </View>
-                          ) : (
-                            <Pressable
-                              onPress={() =>
-                                setViewingProfile({
-                                  idPostulacion: item.id_postulacion,
-                                  idVacante: item.id_vacante,
-                                })
-                              }
-                              style={({ pressed }) => [
-                                styles.openProfileRowBtn,
-                                { backgroundColor: theme.primarySoft },
-                                pressed && styles.pressed,
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.openProfileRowText,
-                                  { color: theme.primary },
-                                ]}
-                              >
-                                Ver perfil completo y CV
-                              </Text>
-                              <ChevronRight size={15} color={theme.primary} />
-                            </Pressable>
-                          )}
-                        </View>
-                      </View>
-                    );
-                  })}
-                </>
-              )}
-            </ScrollView>
+              onOpenProfile={(idPostulacion, idVacante) =>
+                setViewingProfile({ idPostulacion, idVacante })
+              }
+            />
           )}
         </View>
       )}
@@ -1061,33 +1577,313 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
+  flexOne: {
+    flex: 1,
+    gap: 2,
+  },
+
+  /* ---- Visor SVG y haz láser ---- */
+  fullCameraRoot: {
+    flex: 1,
+    backgroundColor: "#000000",
+  },
+
+  laserBeamWrap: {
+    width: "100%",
+  },
+
+  verifyingBox: {
+    position: "absolute",
+    backgroundColor: "rgba(10, 8, 7, 0.76)",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+
+  verifyingLabel: {
+    color: "#FFFFFF",
+    fontSize: 13.5,
+    fontWeight: "700",
+  },
+
+  hintAnchor: {
+    position: "absolute",
+    left: 20,
+    right: 20,
+    alignItems: "center",
+  },
+
+  scanHintPill: {
+    backgroundColor: "rgba(14, 11, 9, 0.72)",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255, 255, 255, 0.16)",
+  },
+
+  scanHintPillCompact: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+
+  scanHintText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: -0.1,
+  },
+
+  scanHintTextCompact: {
+    fontSize: 12,
+  },
+
+  /* ---- HUD Pantalla completa (minimalista y ergonómico) ---- */
+  hudTopBar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  hudTitle: {
+    color: "#FFFFFF",
+    fontSize: 16.5,
+    fontWeight: "800",
+    letterSpacing: -0.25,
+    textShadowColor: "rgba(0, 0, 0, 0.45)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+
+  hudRightActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  hudIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(16, 13, 11, 0.62)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255, 255, 255, 0.20)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  hudIconBtnSmall: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  hudModePill: {
+    height: 40,
+    borderRadius: 20,
+    paddingHorizontal: 13,
+    backgroundColor: "rgba(16, 13, 11, 0.62)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255, 255, 255, 0.20)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  hudModePillText: {
+    color: "#FFFFFF",
+    fontSize: 12.5,
+    fontWeight: "700",
+  },
+
+  hudBottomDock: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 0,
+    alignItems: "center",
+    gap: 12,
+  },
+
+  hudManualChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(16, 13, 11, 0.68)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255, 255, 255, 0.22)",
+  },
+
+  hudManualChipText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  hudSegmentTrack: {
+    width: "100%",
+    flexDirection: "row",
+    padding: 4,
+    borderRadius: 18,
+    backgroundColor: "rgba(16, 13, 11, 0.78)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255, 255, 255, 0.18)",
+    gap: 4,
+  },
+
+  hudSegmentOption: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+
+  hudSegmentTextActive: {
+    color: "#FFFFFF",
+    fontSize: 13.5,
+    fontWeight: "800",
+  },
+
+  hudSegmentText: {
+    color: "rgba(255, 255, 255, 0.88)",
+    fontSize: 13.5,
+    fontWeight: "700",
+  },
+
+  hudPendingBadge: {
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  hudPendingBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  hudTotalMuted: {
+    color: "rgba(255, 255, 255, 0.6)",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+
+  /* ---- Sheet de código manual en modo pantalla completa ---- */
+  manualOverlay: {
+    ...StyleSheet.absoluteFill,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0, 0, 0, 0.48)",
+  },
+
+  manualSheet: {
+    backgroundColor: "#171310",
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255, 255, 255, 0.14)",
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    gap: 14,
+  },
+
+  manualSheetGrabber: {
+    width: 38,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 255, 255, 0.24)",
+    alignSelf: "center",
+  },
+
+  manualSheetHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+
+  manualSheetTitle: {
+    color: "#FFFFFF",
+    fontSize: 16.5,
+    fontWeight: "800",
+  },
+
+  manualSheetSub: {
+    color: "rgba(255, 255, 255, 0.65)",
+    fontSize: 12.5,
+    marginTop: 2,
+  },
+
+  camManualInputWrap: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255, 255, 255, 0.18)",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  camManualInput: {
+    flex: 1,
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+  },
+
+  /* ---- Modo sencillo / Registro ---- */
   header: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 18,
     paddingBottom: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 12,
-  },
-
-  flexOne: {
-    flex: 1,
-    gap: 2,
-  },
-
-  inlineRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
+    gap: 10,
   },
 
   title: {
     fontSize: 19,
     fontWeight: "800",
+    letterSpacing: -0.3,
   },
 
   subtitle: {
     fontSize: 12.5,
+  },
+
+  headerModeBtn: {
+    height: 36,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+
+  headerModeBtnText: {
+    fontSize: 12.5,
+    fontWeight: "800",
   },
 
   closeBtn: {
@@ -1098,41 +1894,61 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  tabsWrap: {
+  segmentOuter: {
     paddingHorizontal: 16,
     paddingTop: 12,
+    paddingBottom: 4,
   },
 
-  tabsBar: {
+  segmentTrack: {
     flexDirection: "row",
     padding: 4,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
     gap: 4,
   },
 
-  tabBtn: {
+  segmentOption: {
     flex: 1,
-    minHeight: 40,
-    borderRadius: 10,
+    minHeight: 42,
+    borderRadius: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 7,
   },
 
-  tabText: {
-    fontSize: 13,
+  segmentOptionActive: {
+    shadowColor: "#000000",
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+
+  segmentLabel: {
+    fontSize: 13.5,
     fontWeight: "700",
+    letterSpacing: -0.2,
+  },
+
+  segmentCountPill: {
+    minWidth: 22,
+    height: 20,
+    paddingHorizontal: 6,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  segmentCountText: {
+    fontSize: 11.5,
+    fontWeight: "800",
   },
 
   content: {
     padding: 16,
-    gap: 12,
-  },
-
-  verifiedStack: {
-    gap: 12,
+    gap: 13,
   },
 
   scannerCard: {
@@ -1141,54 +1957,27 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
 
-  cameraWrap: {
-    height: 300,
+  compactCameraWrap: {
+    height: 256,
     position: "relative",
     backgroundColor: "#000000",
   },
 
-  camera: {
-    flex: 1,
-  },
-
-  cameraOverlay: {
+  compactCamControls: {
     position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 14,
-    backgroundColor: "rgba(0,0,0,0.22)",
+    top: 12,
+    right: 12,
+    flexDirection: "row",
+    gap: 8,
   },
 
-  scanFrame: {
-    width: 190,
-    height: 190,
-    borderRadius: 22,
-    borderWidth: 3,
-    backgroundColor: "transparent",
-  },
-
-  scanHint: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "700",
-    backgroundColor: "rgba(0,0,0,0.58)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    overflow: "hidden",
-  },
-
-  scanningOverlay: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: "rgba(0,0,0,0.55)",
+  compactCamBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(16, 13, 11, 0.66)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255, 255, 255, 0.20)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1199,8 +1988,17 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
+  permIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 2,
+  },
+
   permTitle: {
-    fontSize: 16,
+    fontSize: 16.5,
     fontWeight: "800",
     textAlign: "center",
   },
@@ -1211,11 +2009,22 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
+  permBtnWrap: {
+    width: "100%",
+    marginTop: 6,
+  },
+
   card: {
     borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
     padding: 15,
     gap: 12,
+  },
+
+  manualHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
   },
 
   sectionTitle: {
@@ -1231,8 +2040,8 @@ const styles = StyleSheet.create({
 
   manualInputWrap: {
     flex: 1,
-    minHeight: 46,
-    borderRadius: 13,
+    minHeight: 48,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 12,
     flexDirection: "row",
@@ -1244,13 +2053,14 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14.5,
     fontWeight: "700",
+    letterSpacing: 1,
   },
 
   verifyManualBtn: {
-    minWidth: 86,
-    minHeight: 46,
-    borderRadius: 13,
-    paddingHorizontal: 14,
+    minWidth: 88,
+    minHeight: 48,
+    borderRadius: 14,
+    paddingHorizontal: 16,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1261,28 +2071,62 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  verifiedTopRow: {
+  pendingJumpCard: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+    gap: 12,
+    padding: 13,
+    borderRadius: 18,
+    borderWidth: 1,
   },
 
-  verifiedEyebrow: {
-    fontSize: 10.5,
+  pendingJumpBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  pendingJumpCount: {
+    fontSize: 15,
     fontWeight: "800",
-    letterSpacing: 0.7,
   },
 
-  statusBadge: {
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-
-  statusBadgeText: {
-    fontSize: 11,
+  pendingJumpTitle: {
+    fontSize: 13.5,
     fontWeight: "700",
+  },
+
+  pendingJumpSub: {
+    fontSize: 12,
+  },
+
+  /* ---- Ficha de identidad verificada ---- */
+  verifiedCard: {
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
+  },
+
+  verdictBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+  },
+
+  verdictText: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
+
+  verifiedBody: {
+    padding: 16,
+    gap: 14,
   },
 
   identityHero: {
@@ -1292,33 +2136,46 @@ const styles = StyleSheet.create({
   },
 
   heroName: {
-    fontSize: 20,
+    fontSize: 21,
     fontWeight: "800",
     textAlign: "center",
-    letterSpacing: -0.3,
-    marginTop: 2,
+    letterSpacing: -0.35,
+    marginTop: 4,
   },
 
   heroVacancy: {
-    fontSize: 13,
+    fontSize: 13.5,
+    fontWeight: "600",
     textAlign: "center",
   },
 
-  codePill: {
+  appointmentPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 999,
-    marginTop: 2,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginTop: 4,
+  },
+
+  appointmentPillText: {
+    fontSize: 12.5,
+    fontWeight: "700",
   },
 
   detailsBox: {
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 12,
-    gap: 8,
+    padding: 13,
+    gap: 9,
+  },
+
+  infoLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
   },
 
   detailText: {
@@ -1327,81 +2184,19 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  candidateRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-
-  regCandidateName: {
-    fontSize: 15,
-    fontWeight: "800",
-  },
-
-  candidateSub: {
-    fontSize: 12.5,
-  },
-
-  codeTag: {
-    fontSize: 12.5,
-    fontWeight: "800",
-  },
-
-  regMetaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-
-  infoLine: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  infoText: {
-    flex: 1,
-    fontSize: 12.5,
-    lineHeight: 18,
-  },
-
   actionsStack: {
-    gap: 8,
+    gap: 10,
     marginTop: 2,
   },
 
   approvePrimaryBtn: {
     minHeight: 54,
-    borderRadius: 27,
-    backgroundColor: "#34C759",
+    borderRadius: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     paddingHorizontal: 20,
-  },
-
-  rejectOutlineBtn: {
-    minHeight: 46,
-    borderRadius: 23,
-    backgroundColor: "rgba(255, 59, 48, 0.1)",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255, 59, 48, 0.3)",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-  },
-
-  rejectOutlineText: {
-    color: "#FF3B30",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-
-  decisionRow: {
-    flexDirection: "row",
-    gap: 8,
   },
 
   decisionBtnText: {
@@ -1410,73 +2205,44 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  approveBtnSmall: {
+  secondaryActionsRow: {
+    flexDirection: "row",
+    gap: 9,
+  },
+
+  rejectHalfBtn: {
     flex: 1,
-    minHeight: 42,
-    borderRadius: 12,
-    backgroundColor: "#34C759",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-
-  rejectBtnSmall: {
-    flex: 1,
-    minHeight: 42,
-    borderRadius: 12,
-    backgroundColor: "#FF3B30",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-
-  decisionSmallText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-
-  regFooterRow: {
-    marginTop: 2,
-  },
-
-  openProfileRowBtn: {
-    minHeight: 42,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-
-  openProfileRowText: {
-    fontSize: 13.5,
-    fontWeight: "800",
-  },
-
-  loaderBox: {
-    paddingVertical: 48,
-    alignItems: "center",
-  },
-
-  emptyCard: {
-    borderRadius: 22,
+    minHeight: 46,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 24,
+    flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    justifyContent: "center",
+    gap: 6,
   },
 
-  registryHint: {
-    fontSize: 12.5,
-    fontWeight: "600",
-    paddingHorizontal: 4,
+  rejectHalfText: {
+    fontSize: 13.5,
+    fontWeight: "700",
+  },
+
+  rescanHalfBtn: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+
+  rescanHalfText: {
+    fontSize: 13.5,
+    fontWeight: "700",
   },
 
   pressed: {
-    opacity: 0.78,
+    opacity: 0.76,
   },
 });

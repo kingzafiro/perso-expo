@@ -1,6 +1,7 @@
 import type { AuthUser } from "@/features/auth/types/auth.types";
 import { unregisterCurrentDevicePushToken } from "@/features/notifications/lib/notifications-client";
 import { apiClient } from "@/lib/api/client";
+import { syncBiometricCredentialIfEnabled } from "@/lib/auth/biometrics";
 import { secureStorage } from "@/lib/storage/secure-storage";
 import { useAuthStore } from "@/stores/auth.store";
 import { useEmployerStore } from "@/stores/employer.store";
@@ -59,6 +60,8 @@ export async function saveSessionTokens(
   if (user !== undefined) {
     store.setUser(user);
   }
+
+  await syncBiometricCredentialIfEnabled(refreshToken, resolvedUser);
 
   const needsOnboarding = await resolveNeedsOnboarding(resolvedUser);
   store.setNeedsOnboarding(needsOnboarding);

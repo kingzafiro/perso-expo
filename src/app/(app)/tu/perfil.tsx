@@ -218,8 +218,8 @@ export default function PerfilScreen() {
     switch (activeEditor?.type) {
       case "personal":
         return {
-          title: "Datos personales",
-          subtitle: "Actualiza tu nombre, apellidos y celular de contacto.",
+          title: "Nombre completo",
+          subtitle: "Actualiza tu nombre y apellidos como aparecerán en tu perfil.",
         };
       case "bio":
         return {
@@ -427,12 +427,8 @@ export default function PerfilScreen() {
         {/* 1. Datos personales y Sobre mí */}
         <SettingsGroup title="Información personal">
           <SettingsRow
-            title="Nombre y contacto"
-            subtitle={
-              [displayName, perfil?.usuario?.celular]
-                .filter(Boolean)
-                .join(" · ") || "Agregar datos personales"
-            }
+            title="Nombre completo"
+            subtitle={displayName || "Agregar tu nombre y apellidos"}
             icon={<User size={18} color="#FFFFFF" />}
             iconBgColor={theme.primary}
             showDivider

@@ -24,7 +24,7 @@ import {
 } from "react-native";
 
 import { useBilling } from "@/features/billing/hooks/use-billing";
-import { AdminOverviewCard } from "@/features/employer/components/AdminOverviewCard";
+import { CompanyLogo } from "@/features/employer/components/CompanyLogo";
 import { EmployerInterviewsModal } from "@/features/employer/components/EmployerInterviewsModal";
 import { useEmployerVacancies } from "@/features/employer/hooks/use-employer-vacancies";
 import { useEmployerInterviews } from "@/features/employer/hooks/use-interviews";
@@ -59,10 +59,7 @@ export default function EmpresasHubScreen() {
   const { data: interviews = [], refetch: refetchInterviews } =
     useEmployerInterviews(canEnter);
 
-  const [interviewsModal, setInterviewsModal] = useState<{
-    open: boolean;
-    tab: "scan" | "registry";
-  }>({ open: false, tab: "scan" });
+  const [qrModalOpen, setQrModalOpen] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
 
   useEffect(() => {
@@ -136,18 +133,7 @@ export default function EmpresasHubScreen() {
               },
             ]}
           >
-            <View
-              style={[
-                styles.companyAvatar,
-                { backgroundColor: theme.primarySoft },
-              ]}
-            >
-              {isAdmin ? (
-                <Shield size={23} color={theme.primary} />
-              ) : (
-                <Building2 size={23} color={theme.primary} />
-              )}
-            </View>
+            <CompanyLogo uri={profile?.logoUrl} size={50} borderRadius={16} />
 
             <View style={styles.companyTextGroup}>
               <View style={styles.companyNameRow}>
@@ -174,8 +160,6 @@ export default function EmpresasHubScreen() {
             <ChevronRight size={19} color={theme.textMuted} />
           </Pressable>
         </SettingsGroup>
-
-        {isAdmin ? <AdminOverviewCard /> : null}
 
         {/* 2. Gestión principal: Tus candidatos, Tus publicaciones, Registrar QR, Tus entrevistas */}
         <SettingsGroup title="Reclutamiento">
@@ -207,16 +191,16 @@ export default function EmpresasHubScreen() {
 
           <SettingsRow
             title="Registrar QR"
-            subtitle="Escanea el pase QR del candidato al llegar"
+            subtitle="Escanea el pase del candidato y consulta el registro"
             icon={<ScanLine size={18} color="#FFFFFF" />}
             iconBgColor="#34C759"
             showDivider
-            onPress={() => setInterviewsModal({ open: true, tab: "scan" })}
+            onPress={() => setQrModalOpen(true)}
           />
 
           <SettingsRow
             title="Tus entrevistas"
-            subtitle="Registro de pases QR, accesos aprobados y pendientes"
+            subtitle="Registro de entrevistas, accesos aprobados y pendientes"
             value={
               pendingInterviewsCount > 0
                 ? `${pendingInterviewsCount} pendiente${pendingInterviewsCount === 1 ? "" : "s"}`
@@ -226,7 +210,7 @@ export default function EmpresasHubScreen() {
             }
             icon={<QrCode size={18} color="#FFFFFF" />}
             iconBgColor="#AF52DE"
-            onPress={() => setInterviewsModal({ open: true, tab: "registry" })}
+            onPress={() => router.push("/(app)/empresas/entrevistas")}
           />
         </SettingsGroup>
 
@@ -239,7 +223,7 @@ export default function EmpresasHubScreen() {
                 ? profile.rfc
                   ? `RFC ${profile.rfc} verificado`
                   : "Empresa verificada en Perso"
-                : "Opcional · Sube tu Constancia Fiscal (PDF)"
+                : "Sube tu Constancia de Situación Fiscal (PDF)"
             }
             value={profile?.verified ? "Verificada" : "Pendiente"}
             icon={<FileCheck2 size={18} color="#FFFFFF" />}
@@ -282,11 +266,9 @@ export default function EmpresasHubScreen() {
       </ScrollView>
 
       <EmployerInterviewsModal
-        visible={interviewsModal.open}
-        initialTab={interviewsModal.tab}
-        onClose={() =>
-          setInterviewsModal((prev) => ({ ...prev, open: false }))
-        }
+        visible={qrModalOpen}
+        initialTab="scan"
+        onClose={() => setQrModalOpen(false)}
       />
     </View>
   );

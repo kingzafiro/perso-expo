@@ -27,6 +27,14 @@ export interface UpsertEmployerProfileInput {
   industry: string;
   companySize: string;
   city: string;
+  estado?: string;
+  municipio?: string;
+  calle?: string;
+  numero?: string;
+  colonia?: string;
+  cp?: string;
+  latitud?: number | null;
+  longitud?: number | null;
   contactName: string;
   contactRole: string;
   workEmail: string;
@@ -34,6 +42,7 @@ export interface UpsertEmployerProfileInput {
   description: string;
   selectedPlanId?: EmployerPlanId | null;
   billingCycle?: BillingCycle;
+  requireContactVerification?: boolean;
 }
 
 export interface SyncSubscriptionInput {
@@ -93,6 +102,80 @@ export async function upsertEmployerProfileApi(
   const { data } = await apiClient.put<
     EmployerStatusPayload & { ok: boolean; mensaje: string; empresa: EmployerProfile }
   >("/profile", payload, { baseURL: env.employerApiUrl });
+  return data;
+}
+
+export async function sendEmployerEmailCodeApi(payload: {
+  email: string;
+  companyName?: string;
+}): Promise<{
+  ok: boolean;
+  mensaje: string;
+  email: string;
+  cooldown_segundos: number;
+  debug_codigo?: string;
+}> {
+  const { data } = await apiClient.post(
+    "/contacto/email/enviar-codigo",
+    payload,
+    { baseURL: env.employerApiUrl },
+  );
+  return data;
+}
+
+export async function verifyEmployerEmailCodeApi(payload: {
+  email: string;
+  codigo: string;
+}): Promise<{
+  ok: boolean;
+  mensaje: string;
+  email: string;
+  verificado: boolean;
+}> {
+  const { data } = await apiClient.post(
+    "/contacto/email/verificar-codigo",
+    payload,
+    { baseURL: env.employerApiUrl },
+  );
+  return data;
+}
+
+export async function sendEmployerPhoneCodeApi(payload: {
+  codigo_pais?: string;
+  numero: string;
+}): Promise<{
+  ok: boolean;
+  mensaje: string;
+  telefono: string;
+  numero: string;
+  cooldown_segundos: number;
+  proveedor?: string;
+  debug_codigo?: string;
+}> {
+  const { data } = await apiClient.post(
+    "/contacto/telefono/enviar-codigo",
+    payload,
+    { baseURL: env.employerApiUrl },
+  );
+  return data;
+}
+
+export async function verifyEmployerPhoneCodeApi(payload: {
+  codigo_pais?: string;
+  numero: string;
+  codigo: string;
+}): Promise<{
+  ok: boolean;
+  mensaje: string;
+  telefono: string;
+  numero: string;
+  verificado: boolean;
+}> {
+  const { data } = await apiClient.post(
+    "/contacto/telefono/verificar-codigo",
+    payload,
+    { baseURL: env.employerApiUrl },
+  );
   return data;
 }
 
@@ -241,5 +324,44 @@ export async function uploadEmployerVerificationPdfApi(file: {
     timeout: 45_000,
   });
 
+  return data;
+}
+
+export async function uploadEmployerLogoApi(file: {
+  uri: string;
+  name: string;
+  mimeType: string;
+}): Promise<EmployerStatusPayload & { ok: boolean; mensaje: string }> {
+  const formData = new FormData();
+
+  if (Platform.OS === "web") {
+    const response = await fetch(file.uri);
+    const blob = await response.blob();
+    formData.append("logo", blob, file.name);
+  } else {
+    formData.append("logo", {
+      uri: file.uri,
+      name: file.name,
+      type: file.mimeType,
+    } as unknown as Blob);
+  }
+
+  const { data } = await apiClient.post<
+    EmployerStatusPayload & { ok: boolean; mensaje: string }
+  >("/logo", formData, {
+    baseURL: env.employerApiUrl,
+    headers: { "Content-Type": "multipart/form-data" },
+    timeout: 30_000,
+  });
+
+  return data;
+}
+
+export async function deleteEmployerLogoApi(): Promise<
+  EmployerStatusPayload & { ok: boolean; mensaje: string }
+> {
+  const { data } = await apiClient.delete<
+    EmployerStatusPayload & { ok: boolean; mensaje: string }
+  >("/logo", { baseURL: env.employerApiUrl });
   return data;
 }

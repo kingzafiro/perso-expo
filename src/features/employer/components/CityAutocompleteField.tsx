@@ -32,6 +32,8 @@ export interface ResolvedCitySelection {
   city: string;
   postalCode: string;
   neighborhood: string;
+  lat?: number | null;
+  lng?: number | null;
 }
 
 interface CityAutocompleteFieldProps {
@@ -164,6 +166,8 @@ export function CityAutocompleteField({
         city: formatted,
         postalCode: details.cp || "",
         neighborhood: details.colonia || "",
+        lat: details.lat,
+        lng: details.lng,
       });
     } catch {
       onSelectCity(fallbackLabel);
@@ -171,6 +175,8 @@ export function CityAutocompleteField({
         city: fallbackLabel,
         postalCode: "",
         neighborhood: "",
+        lat: null,
+        lng: null,
       });
     } finally {
       setIsResolving(false);
@@ -225,6 +231,8 @@ export function CityAutocompleteField({
           city: formatted,
           postalCode: resolved.cp || "",
           neighborhood: resolved.colonia || "",
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
         });
       }
     } catch {

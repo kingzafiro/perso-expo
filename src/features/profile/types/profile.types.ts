@@ -2,6 +2,8 @@ import type { AuthUser } from "@/features/auth/types/auth.types";
 
 export interface ProfileUser extends AuthUser {
   celular?: string | null;
+  celular_verificado?: boolean;
+  celular_verificado_at?: string | null;
 }
 
 export interface ProfileDireccion {

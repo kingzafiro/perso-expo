@@ -1,12 +1,18 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AxiosError } from "axios";
 import { router } from "expo-router";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
 import { FormInput } from "@/components/ui/FormInput";
+import { BiometricLoginButton } from "@/features/auth/components/BiometricLoginButton";
 import { SocialAuthButtons } from "@/features/auth/components/SocialAuthButtons";
+import {
+  useBiometricLogin,
+  useBiometricStatus,
+} from "@/features/auth/hooks/use-biometric-login";
 import { useLogin } from "@/features/auth/hooks/use-login";
 import {
   loginSchema,
@@ -18,6 +24,11 @@ import { useTheme } from "@/hooks/use-theme";
 export function LoginForm() {
   const theme = useTheme();
   const loginMutation = useLogin();
+  const { status: biometricStatus, refresh: refreshBiometrics } =
+    useBiometricStatus();
+  const biometricLoginMutation = useBiometricLogin(refreshBiometrics);
+
+  const [biometricError, setBiometricError] = useState<string | null>(null);
 
   const loginError = loginMutation.error as AxiosError<ApiErrorResponse> | null;
 
@@ -36,10 +47,20 @@ export function LoginForm() {
   });
 
   const onSubmit = (data: LoginFormData) => {
+    setBiometricError(null);
     loginMutation.mutate({
       email: data.email.trim().toLowerCase(),
       password: data.password,
     });
+  };
+
+  const handleBiometricLogin = async () => {
+    setBiometricError(null);
+    const result = await biometricLoginMutation.mutateAsync();
+
+    if (!result.ok && !result.cancelled && result.message) {
+      setBiometricError(result.message);
+    }
   };
 
   return (
@@ -111,11 +132,31 @@ export function LoginForm() {
         </View>
       )}
 
+      {biometricError && (
+        <View style={[styles.apiError, { backgroundColor: theme.errorSoft }]}>
+          <Text style={[styles.apiErrorText, { color: theme.error }]}>
+            {biometricError}
+          </Text>
+        </View>
+      )}
+
       <AppButton
         title="Iniciar sesión"
         loading={loginMutation.isPending}
+        disabled={biometricLoginMutation.isPending}
         onPress={handleSubmit(onSubmit)}
       />
+
+      {biometricStatus.canLoginWithBiometrics && (
+        <BiometricLoginButton
+          kind={biometricStatus.kind}
+          label={biometricStatus.label}
+          accountEmail={biometricStatus.savedAccount?.email}
+          loading={biometricLoginMutation.isPending}
+          disabled={loginMutation.isPending}
+          onPress={handleBiometricLogin}
+        />
+      )}
 
       <SocialAuthButtons dividerText="o continúa con" />
     </View>

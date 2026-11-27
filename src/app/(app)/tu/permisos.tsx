@@ -1,5 +1,11 @@
-import { Bell, Camera, FolderOpen, Image as ImageIcon } from "lucide-react-native";
-import { Linking, ScrollView, StyleSheet, View } from "react-native";
+import {
+  Bell,
+  Camera,
+  FolderOpen,
+  Image as ImageIcon,
+  ScanFace,
+} from "lucide-react-native";
+import { Linking, Platform, ScrollView, StyleSheet, View } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
 import {
@@ -65,6 +71,15 @@ export default function PermisosScreen() {
             subtitle="Adjuntar CV y comprobantes en PDF"
             icon={<FolderOpen size={18} color="#FFFFFF" />}
             iconBgColor="#0A84FF"
+            showDivider
+            onPress={openSystemSettings}
+          />
+
+          <SettingsRow
+            title={Platform.OS === "ios" ? "Face ID" : "Biometría"}
+            subtitle="Inicio de sesión rápido y seguro"
+            icon={<ScanFace size={18} color="#FFFFFF" />}
+            iconBgColor="#5856D6"
             onPress={openSystemSettings}
           />
         </SettingsGroup>

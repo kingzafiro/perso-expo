@@ -1,7 +1,7 @@
 import * as Haptics from "expo-haptics";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Bookmark } from "lucide-react-native";
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -29,11 +29,22 @@ export default function MisFavoritosScreen() {
   const theme = useTheme();
 
   const {
-    data: favorites = [],
+    data: rawFavorites = [],
     isLoading,
     refetch,
   } = useFavoriteVacancies();
   const { toggleFavorite } = useToggleFavoriteVacancy();
+
+  useFocusEffect(
+    useCallback(() => {
+      void refetch();
+    }, [refetch]),
+  );
+
+  const favorites = useMemo(
+    () => rawFavorites.filter((v) => v.estado === "activa"),
+    [rawFavorites],
+  );
 
   const [selectedVacancy, setSelectedVacancy] =
     useState<EmployerVacancy | null>(null);
@@ -101,7 +112,7 @@ export default function MisFavoritosScreen() {
             <View style={styles.emptyCta}>
               <AppButton
                 title="Explorar empleos"
-                onPress={() => router.navigate("/(app)/empleos")}
+                onPress={() => router.navigate("/(app)")}
               />
             </View>
           </View>

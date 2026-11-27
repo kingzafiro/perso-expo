@@ -3,6 +3,9 @@ export interface AuthUser {
   nombre: string | null;
   apellido_paterno?: string | null;
   apellido_materno?: string | null;
+  celular?: string | null;
+  celular_verificado?: boolean;
+  celular_verificado_at?: string | null;
   email: string;
   foto_perfil?: string | null;
 }

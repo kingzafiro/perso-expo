@@ -93,6 +93,21 @@ export async function resolveEmployerInterviewQrApi(
   return data;
 }
 
+export async function cancelEmployerInterviewApi(
+  idEntrevista: number,
+): Promise<{ ok: boolean; mensaje: string; entrevista: InterviewPass }> {
+  const { data } = await apiClient.patch<{
+    ok: boolean;
+    mensaje: string;
+    entrevista: InterviewPass;
+  }>(
+    `/entrevistas/${idEntrevista}/cancelar`,
+    {},
+    { baseURL: env.employerApiUrl },
+  );
+  return data;
+}
+
 export async function fetchMyInterviewsApi(): Promise<InterviewPass[]> {
   const { data } = await apiClient.get<{
     ok: boolean;

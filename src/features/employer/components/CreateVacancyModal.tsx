@@ -216,6 +216,44 @@ export function CreateVacancyModal({
 
   const values = watch();
 
+  const hasVacancyChanges = (() => {
+    if (!editingVacancy) return true;
+    const norm = (s?: string | null) => (s ?? "").trim();
+    const initialSalaryMode = inferSalaryMode(editingVacancy);
+    const initialMin = editingVacancy.salario_min
+      ? String(editingVacancy.salario_min)
+      : "";
+    const initialMax = editingVacancy.salario_max
+      ? String(editingVacancy.salario_max)
+      : "";
+    const currentBenefits = [...beneficios].sort().join("|");
+    const initialBenefits = [...(editingVacancy.beneficios ?? [])]
+      .sort()
+      .join("|");
+
+    return (
+      norm(values.titulo) !== norm(editingVacancy.titulo) ||
+      values.modalidad !== editingVacancy.modalidad ||
+      values.tipo_contrato !== editingVacancy.tipo_contrato ||
+      norm(values.ciudad) !== norm(editingVacancy.ciudad) ||
+      norm(values.codigo_postal) !== norm(editingVacancy.codigo_postal) ||
+      norm(values.zona_colonia) !== norm(editingVacancy.zona_colonia) ||
+      salaryMode !== initialSalaryMode ||
+      norm(values.salario_min) !== initialMin ||
+      norm(values.salario_max) !== initialMax ||
+      values.salario_periodo !== (editingVacancy.salario_periodo ?? "mensual") ||
+      norm(values.horario) !== norm(editingVacancy.horario) ||
+      norm(values.experiencia) !== norm(editingVacancy.experiencia) ||
+      norm(values.escolaridad) !== norm(editingVacancy.escolaridad) ||
+      norm(values.descripcion) !== norm(editingVacancy.descripcion) ||
+      norm(values.responsabilidades) !== norm(editingVacancy.responsabilidades) ||
+      norm(values.requisitos) !== norm(editingVacancy.requisitos) ||
+      norm(values.perfil_tecnico) !== norm(editingVacancy.perfil_tecnico) ||
+      norm(values.ofrecemos) !== norm(editingVacancy.ofrecemos) ||
+      currentBenefits !== initialBenefits
+    );
+  })();
+
   const goToStep = (next: number) => {
     setStep(next);
     scrollRef.current?.scrollTo({ y: 0, animated: true });
@@ -659,6 +697,7 @@ export function CreateVacancyModal({
             <AppButton
               title={editingVacancy ? "Guardar cambios" : "Publicar vacante"}
               loading={submitting}
+              disabled={Boolean(editingVacancy) && !hasVacancyChanges}
               onPress={handleSubmit(handleFormSubmit)}
             />
           )}
